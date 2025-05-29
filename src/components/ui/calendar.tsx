@@ -196,6 +196,17 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
         a => isSameDay(new Date(a.date), date)
       );
 
+      if (existing && !existing.available) {
+        return {
+          room_id: currentRoomId,
+          date: format(date, 'yyyy-MM-dd'),
+          price_override: existing.price_override,
+          available: false,
+          blocked_reason: existing.blocked_reason,
+          notes: existing.notes
+        };
+      }
+
       return {
         room_id: currentRoomId,
         date: format(date, 'yyyy-MM-dd'),
