@@ -1,8 +1,7 @@
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isWithinInterval } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useState, useEffect } from 'react';
-import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -136,6 +135,22 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     setSelectedDateRange({ start, end });
   };
 
+  const handleDateClick = (day: Date, roomId: number) => {
+    setSelectedRoom(roomId);
+    if (!selectedDateRange.start) {
+      setSelectedDateRange({ start: day, end: null });
+    } else if (!selectedDateRange.end) {
+      const start = selectedDateRange.start;
+      if (day < start) {
+        setSelectedDateRange({ start: day, end: start });
+      } else {
+        setSelectedDateRange({ start, end: day });
+      }
+    } else {
+      setSelectedDateRange({ start: day, end: null });
+    }
+  };
+
   const handleBulkPriceUpdate = async (price: number) => {
     if (!selectedDateRange.start || !selectedDateRange.end || !selectedRoom) return;
 
@@ -184,12 +199,20 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const isDateSelected = (date: Date) => {
-    if (!selectedDateRange.start || !selectedDateRange.end) return false;
+    if (!selectedDateRange.start || !selectedDateRange.end) {
+      return selectedDateRange.start ? isSameDay(date, selectedDateRange.start) : false;
+    }
     return isWithinInterval(date, {
       start: selectedDateRange.start,
       end: selectedDateRange.end
     });
   };
+
+  const isRangeStart = (date: Date) => 
+    selectedDateRange.start && isSameDay(date, selectedDateRange.start);
+
+  const isRangeEnd = (date: Date) =>
+    selectedDateRange.end && isSameDay(date, selectedDateRange.end);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -228,6 +251,8 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                 {days.map(day => {
                   const status = getAvailabilityStatus(day, room.id);
                   const isSelected = isDateSelected(day);
+                  const isStart = isRangeStart(day);
+                  const isEnd = isRangeEnd(day);
                   const dayPrice = availability.find(
                     a => a.room_id === room.id && 
                     isSameDay(new Date(a.date), day)
@@ -236,27 +261,18 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                   return (
                     <button
                       key={day.toString()}
-                      onClick={() => {
-                        setSelectedRoom(room.id);
-                        if (!selectedDateRange.start) {
-                          setSelectedDateRange({ start: day, end: null });
-                        } else if (!selectedDateRange.end) {
-                          setSelectedDateRange(prev => ({
-                            start: prev.start,
-                            end: day
-                          }));
-                        } else {
-                          setSelectedDateRange({ start: day, end: null });
-                        }
-                      }}
+                      onClick={() => handleDateClick(day, room.id)}
                       className={cn(
-                        'h-16 w-full rounded-lg text-sm p-2 transition-all relative',
+                        'h-16 w-full text-sm p-2 transition-all relative',
                         !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
                         isToday(day) && 'border-2 border-blue-500',
-                        isSelected && 'bg-blue-50 hover:bg-blue-100',
-                        status === 'available' && 'bg-green-50 hover:bg-green-100',
-                        status === 'blocked' && 'bg-red-50 hover:bg-red-100',
-                        status === 'booked' && 'bg-yellow-50 hover:bg-yellow-100'
+                        isSelected && 'bg-blue-50',
+                        isStart && 'rounded-l-lg border-l-2 border-blue-500',
+                        isEnd && 'rounded-r-lg border-r-2 border-blue-500',
+                        isSelected && !isStart && !isEnd && 'border-y-2 border-blue-500',
+                        status === 'available' && !isSelected && 'bg-green-50 hover:bg-green-100',
+                        status === 'blocked' && !isSelected && 'bg-red-50 hover:bg-red-100',
+                        status === 'booked' && !isSelected && 'bg-yellow-50 hover:bg-yellow-100'
                       )}
                     >
                       <span className="block font-medium">{format(day, 'd')}</span>
