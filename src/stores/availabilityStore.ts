@@ -13,7 +13,7 @@ interface AvailabilityStore {
   updateBulkAvailability: (updates: Partial<Availability>[]) => Promise<void>;
 }
 
-export const useAvailabilityStore = create<AvailabilityStore>((set) => ({
+export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
   availability: [],
   loading: false,
   error: null,
@@ -31,7 +31,7 @@ export const useAvailabilityStore = create<AvailabilityStore>((set) => ({
         .order('date');
       
       if (error) throw error;
-      set({ availability: data, loading: false });
+      set({ availability: data || [], loading: false });
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
     }
@@ -39,16 +39,18 @@ export const useAvailabilityStore = create<AvailabilityStore>((set) => ({
   updateAvailability: async (id, updates) => {
     set({ loading: true, error: null });
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('availability')
         .update(updates)
-        .eq('id', id);
+        .eq('id', id)
+        .select()
+        .single();
       
       if (error) throw error;
       
       set((state) => ({
         availability: state.availability.map((item) =>
-          item.id === id ? { ...item, ...updates } : item
+          item.id === id ? { ...item, ...data } : item
         ),
         loading: false,
       }));
@@ -59,19 +61,24 @@ export const useAvailabilityStore = create<AvailabilityStore>((set) => ({
   updateBulkAvailability: async (updates) => {
     set({ loading: true, error: null });
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('availability')
-        .upsert(updates);
+        .upsert(updates, { 
+          onConflict: 'room_id,date',
+          ignoreDuplicates: false 
+        })
+        .select();
       
       if (error) throw error;
+
+      // Refresh the availability data after bulk update
+      const currentState = get();
+      const month = updates[0]?.date?.substring(0, 7); // Get YYYY-MM from the first update
+      if (month) {
+        await currentState.fetchAvailability(month);
+      }
       
-      set((state) => ({
-        availability: state.availability.map((item) => {
-          const update = updates.find((u) => u.id === item.id);
-          return update ? { ...item, ...update } : item;
-        }),
-        loading: false,
-      }));
+      set({ loading: false });
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
     }
