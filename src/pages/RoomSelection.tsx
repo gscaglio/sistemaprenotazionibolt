@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BedDouble } from 'lucide-react';
 import { useRoomStore } from '../stores/roomStore';
 
 function RoomSelection() {
-  const { rooms } = useRoomStore();
+  const { rooms, fetchRooms } = useRoomStore();
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
 
   return (
     <div className="container mx-auto px-4 py-8">
