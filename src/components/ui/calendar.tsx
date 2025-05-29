@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { format, eachDayOfInterval } from 'date-fns';
 import { toast } from 'react-hot-toast';
-import { updateBulkAvailability } from '../../lib/api/availability';
+import { availabilityApi } from '../../lib/api/availability';
 
 interface CalendarProps {
   mode: 'admin' | 'user';
@@ -32,7 +32,7 @@ export function Calendar({ mode }: CalendarProps) {
     }));
 
     try {
-      await updateBulkAvailability(daysToUpdate);
+      await availabilityApi.bulkUpdateAvailability(daysToUpdate);
       toast.success('Disponibilità aggiornata con successo');
       // Clear the selection after successful update
       setSelectedDateRanges(new Map(selectedDateRanges.set(selectedRoom, { start: null, end: null })));
