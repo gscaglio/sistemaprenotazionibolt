@@ -67,7 +67,7 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
           onConflict: 'room_id,date',
           ignoreDuplicates: false 
         })
-        .select();
+        .select('*'); // Fixed: Explicitly select all columns
       
       if (error) throw error;
 
