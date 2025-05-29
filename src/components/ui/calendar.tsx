@@ -1,11 +1,10 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isWithinInterval } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
-import { availabilityApi } from '../../lib/api/availability';
 import toast from 'react-hot-toast';
 
 interface CalendarProps {
@@ -34,7 +33,7 @@ function DateRangePicker({ startDate, endDate, onDateChange }: DateRangePickerPr
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700">Al</label>
+        <label className="block text-sm font-medium text-gray-700">Fino al</label>
         <input
           type="date"
           value={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
@@ -60,10 +59,6 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900">
-        Modifica date selezionate
-      </h3>
-      
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">
@@ -115,10 +110,7 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
 
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date | null; end: Date | null }>({
-    start: null,
-    end: null
-  });
+  const [selectedDateRanges, setSelectedDateRanges] = useState<Map<number, { start: Date | null; end: Date | null }>>(new Map());
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   
   const { rooms } = useRoomStore();
@@ -131,32 +123,32 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   const previousMonth = () => setCurrentDate(addMonths(currentDate, -1));
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
 
-  const handleDateRangeChange = (start: Date | null, end: Date | null) => {
-    setSelectedDateRange({ start, end });
-  };
-
   const handleDateClick = (day: Date, roomId: number) => {
     setSelectedRoom(roomId);
-    if (!selectedDateRange.start) {
-      setSelectedDateRange({ start: day, end: null });
-    } else if (!selectedDateRange.end) {
-      const start = selectedDateRange.start;
+    const currentRange = selectedDateRanges.get(roomId) || { start: null, end: null };
+    
+    if (!currentRange.start) {
+      setSelectedDateRanges(new Map(selectedDateRanges.set(roomId, { start: day, end: null })));
+    } else if (!currentRange.end) {
+      const start = currentRange.start;
       if (day < start) {
-        setSelectedDateRange({ start: day, end: start });
+        setSelectedDateRanges(new Map(selectedDateRanges.set(roomId, { start: day, end: start })));
       } else {
-        setSelectedDateRange({ start, end: day });
+        setSelectedDateRanges(new Map(selectedDateRanges.set(roomId, { start, end: day })));
       }
     } else {
-      setSelectedDateRange({ start: day, end: null });
+      setSelectedDateRanges(new Map(selectedDateRanges.set(roomId, { start: day, end: null })));
     }
   };
 
   const handleBulkPriceUpdate = async (price: number) => {
-    if (!selectedDateRange.start || !selectedDateRange.end || !selectedRoom) return;
+    if (!selectedRoom) return;
+    const range = selectedDateRanges.get(selectedRoom);
+    if (!range?.start || !range?.end) return;
 
     const daysToUpdate = eachDayOfInterval({
-      start: selectedDateRange.start,
-      end: selectedDateRange.end
+      start: range.start,
+      end: range.end
     }).map(date => ({
       room_id: selectedRoom,
       date: format(date, 'yyyy-MM-dd'),
@@ -164,7 +156,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     }));
 
     try {
-      await availabilityApi.bulkUpdateAvailability(daysToUpdate);
+      await updateBulkAvailability(daysToUpdate);
       toast.success('Prezzi aggiornati con successo');
     } catch (error) {
       toast.error('Errore durante l\'aggiornamento dei prezzi');
@@ -172,11 +164,13 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleBulkAvailabilityUpdate = async (status: 'available' | 'blocked') => {
-    if (!selectedDateRange.start || !selectedDateRange.end || !selectedRoom) return;
+    if (!selectedRoom) return;
+    const range = selectedDateRanges.get(selectedRoom);
+    if (!range?.start || !range?.end) return;
 
     const daysToUpdate = eachDayOfInterval({
-      start: selectedDateRange.start,
-      end: selectedDateRange.end
+      start: range.start,
+      end: range.end
     }).map(date => ({
       room_id: selectedRoom,
       date: format(date, 'yyyy-MM-dd'),
@@ -184,7 +178,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     }));
 
     try {
-      await availabilityApi.bulkUpdateAvailability(daysToUpdate);
+      await updateBulkAvailability(daysToUpdate);
       toast.success('Disponibilità aggiornata con successo');
     } catch (error) {
       toast.error('Errore durante l\'aggiornamento della disponibilità');
@@ -198,21 +192,26 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     return dayAvailability?.status || 'available';
   };
 
-  const isDateSelected = (date: Date) => {
-    if (!selectedDateRange.start || !selectedDateRange.end) {
-      return selectedDateRange.start ? isSameDay(date, selectedDateRange.start) : false;
+  const isDateSelected = (date: Date, roomId: number) => {
+    const range = selectedDateRanges.get(roomId);
+    if (!range?.start || !range?.end) {
+      return range?.start ? isSameDay(date, range.start) : false;
     }
     return isWithinInterval(date, {
-      start: selectedDateRange.start,
-      end: selectedDateRange.end
+      start: range.start,
+      end: range.end
     });
   };
 
-  const isRangeStart = (date: Date) => 
-    selectedDateRange.start && isSameDay(date, selectedDateRange.start);
+  const isRangeStart = (date: Date, roomId: number) => {
+    const range = selectedDateRanges.get(roomId);
+    return range?.start && isSameDay(date, range.start);
+  };
 
-  const isRangeEnd = (date: Date) =>
-    selectedDateRange.end && isSameDay(date, selectedDateRange.end);
+  const isRangeEnd = (date: Date, roomId: number) => {
+    const range = selectedDateRanges.get(roomId);
+    return range?.end && isSameDay(date, range.end);
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -247,12 +246,12 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
           {rooms.map(room => (
             <div key={room.id} className="mb-8">
               <h3 className="text-lg font-semibold mb-4 text-gray-900">{room.name}</h3>
-              <div className="grid grid-cols-7 gap-1">
+              <div className="grid grid-cols-7 gap-px bg-gray-200">
                 {days.map(day => {
                   const status = getAvailabilityStatus(day, room.id);
-                  const isSelected = isDateSelected(day);
-                  const isStart = isRangeStart(day);
-                  const isEnd = isRangeEnd(day);
+                  const isSelected = isDateSelected(day, room.id);
+                  const isStart = isRangeStart(day, room.id);
+                  const isEnd = isRangeEnd(day, room.id);
                   const dayPrice = availability.find(
                     a => a.room_id === room.id && 
                     isSameDay(new Date(a.date), day)
@@ -260,27 +259,23 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                   
                   return (
                     <button
-                      key={day.toString()}
+                      key={`${room.id}-${day.toString()}`}
                       onClick={() => handleDateClick(day, room.id)}
                       className={cn(
-                        'h-16 w-full text-sm p-2 transition-all relative',
+                        'h-24 w-full bg-white p-2 transition-all relative flex flex-col items-start justify-between',
                         !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
-                        isToday(day) && 'border-2 border-blue-500',
                         isSelected && 'bg-blue-50',
-                        isStart && 'rounded-l-lg border-l-2 border-blue-500',
-                        isEnd && 'rounded-r-lg border-r-2 border-blue-500',
-                        isSelected && !isStart && !isEnd && 'border-y-2 border-blue-500',
-                        status === 'available' && !isSelected && 'bg-green-50 hover:bg-green-100',
-                        status === 'blocked' && !isSelected && 'bg-red-50 hover:bg-red-100',
-                        status === 'booked' && !isSelected && 'bg-yellow-50 hover:bg-yellow-100'
+                        isStart && 'border-l-4 border-blue-500',
+                        isEnd && 'border-r-4 border-blue-500',
+                        isSelected && !isStart && !isEnd && 'border-y-4 border-blue-500',
+                        status === 'blocked' && !isSelected && 'bg-red-50'
                       )}
                     >
-                      <span className="block font-medium">{format(day, 'd')}</span>
-                      {dayPrice && (
-                        <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-700">
-                          €{dayPrice}
-                        </span>
-                      )}
+                      <span className="text-lg font-medium">{format(day, 'd')}</span>
+                      <div className="text-sm">
+                        <div className="text-gray-600">Disponibile</div>
+                        <div className="font-medium">€{dayPrice || room.base_price}</div>
+                      </div>
                     </button>
                   );
                 })}
@@ -295,19 +290,27 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
           <h3 className="text-lg font-semibold mb-4 text-gray-900">
             Seleziona periodo
           </h3>
-          <DateRangePicker
-            startDate={selectedDateRange.start}
-            endDate={selectedDateRange.end}
-            onDateChange={handleDateRangeChange}
-          />
+          {selectedRoom && (
+            <DateRangePicker
+              startDate={selectedDateRanges.get(selectedRoom)?.start || null}
+              endDate={selectedDateRanges.get(selectedRoom)?.end || null}
+              onDateChange={(start, end) => {
+                if (selectedRoom) {
+                  setSelectedDateRanges(new Map(selectedDateRanges.set(selectedRoom, { start, end })));
+                }
+              }}
+            />
+          )}
         </div>
 
-        <BulkEditPanel
-          selectedDates={selectedDateRange}
-          selectedRoom={selectedRoom}
-          onUpdatePrice={handleBulkPriceUpdate}
-          onUpdateAvailability={handleBulkAvailabilityUpdate}
-        />
+        {selectedRoom && (
+          <BulkEditPanel
+            selectedDates={selectedDateRanges.get(selectedRoom) || { start: null, end: null }}
+            selectedRoom={selectedRoom}
+            onUpdatePrice={handleBulkPriceUpdate}
+            onUpdateAvailability={handleBulkAvailabilityUpdate}
+          />
+        )}
       </div>
     </div>
   );
