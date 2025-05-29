@@ -47,3 +47,5 @@ function CalendarPage() {
     </div>
   );
 }
+
+export default CalendarPage
