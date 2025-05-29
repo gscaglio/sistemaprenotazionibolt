@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isWithinInterval, isBefore } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { DndContext, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
@@ -141,12 +141,22 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
 }
 
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className, currentRoomId }: CalendarProps) {
-  const [displayedMonths, setDisplayedMonths] = useState([new Date()]);
+  const [displayedMonths, setDisplayedMonths] = useState(() => {
+    const today = new Date();
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+      months.push(addMonths(today, i));
+    }
+    return months;
+  });
+  
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date | null; end: Date | null }>({
     start: null,
     end: null
   });
   const [isDragging, setIsDragging] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
   
   const { rooms } = useRoomStore();
   const { availability, fetchAvailability } = useAvailabilityStore();
@@ -166,22 +176,17 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     });
   }, [displayedMonths, fetchAvailability]);
 
-  const addMonth = () => {
-    setDisplayedMonths(months => {
-      const lastMonth = months[months.length - 1];
-      const nextMonth = addMonths(lastMonth, 1);
-      return [...months, nextMonth];
-    });
-  };
-
-  const removeMonth = () => {
-    setDisplayedMonths(months => {
-      if (months.length > 1) {
-        return months.slice(0, -1);
+  useEffect(() => {
+    const handleScroll = () => {
+      if (sidebarRef.current && calendarRef.current) {
+        const { top } = calendarRef.current.getBoundingClientRect();
+        sidebarRef.current.style.top = `${Math.max(0, -top)}px`;
       }
-      return months;
-    });
-  };
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleDateRangeChange = (start: Date | null, end: Date | null) => {
     if (!isEmergencyActive) {
@@ -306,11 +311,6 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     }
   };
 
-  if (!currentRoomId) return null;
-
-  const currentRoom = rooms.find(room => room.id === currentRoomId);
-  if (!currentRoom) return null;
-
   const renderMonth = (currentDate: Date) => {
     const firstDayOfMonth = startOfMonth(currentDate);
     const lastDayOfMonth = endOfMonth(currentDate);
@@ -400,31 +400,18 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     );
   };
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-      <div className="md:col-span-2">
-        <div className={cn('bg-white rounded-lg shadow-lg p-6', className)}>
-          <div className="flex justify-end space-x-2 mb-6">
-            <button
-              onClick={removeMonth}
-              disabled={displayedMonths.length === 1}
-              className={cn(
-                "px-3 py-1 rounded-md text-sm",
-                displayedMonths.length === 1 
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-red-100 text-red-600 hover:bg-red-200"
-              )}
-            >
-              Mostra meno mesi
-            </button>
-            <button
-              onClick={addMonth}
-              className="px-3 py-1 rounded-md text-sm bg-blue-100 text-blue-600 hover:bg-blue-200"
-            >
-              Mostra più mesi
-            </button>
-          </div>
+  if (!currentRoomId) return null;
 
+  const currentRoom = rooms.find(room => room.id === currentRoomId);
+  if (!currentRoom) return null;
+
+  return (
+    <div className="flex gap-8">
+      <div 
+        ref={calendarRef} 
+        className="flex-grow"
+      >
+        <div className={cn('bg-white rounded-lg shadow-lg p-6', className)}>
           <DndContext
             sensors={sensors}
             onDragStart={handleDragStart}
@@ -436,7 +423,11 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div 
+        ref={sidebarRef}
+        className="w-80 flex-shrink-0 space-y-6 fixed top-0 right-4 transition-all duration-200"
+        style={{ maxHeight: 'calc(100vh - 2rem)' }}
+      >
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <h3 className="text-lg font-semibold mb-4 text-gray-900">
             Seleziona periodo
