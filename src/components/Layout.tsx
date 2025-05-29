@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, BookOpen, Settings, LogOut } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useEmergencyStore } from '../stores/emergencyStore';
+import { useRoomStore } from '../stores/roomStore';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,9 +14,22 @@ function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { isEmergencyActive } = useEmergencyStore();
+  const { rooms } = useRoomStore();
+
+  const handleCalendarClick = (e: React.MouseEvent) => {
+    if (isEmergencyActive) {
+      e.preventDefault();
+      navigate('/settings');
+    }
+  };
 
   const navigation = [
-    { name: 'Calendario', href: '/calendar', icon: Calendar },
+    { 
+      name: 'Calendario', 
+      href: rooms[0]?.id ? `/calendar/${rooms[0].id}` : '/', 
+      icon: Calendar,
+      onClick: handleCalendarClick
+    },
     { name: 'Prenotazioni', href: '/bookings', icon: BookOpen },
     { name: 'Impostazioni', href: '/settings', icon: Settings },
   ];
@@ -42,8 +56,9 @@ function Layout({ children }: LayoutProps) {
                   <Link
                     key={item.name}
                     to={item.href}
+                    onClick={item.onClick}
                     className={`flex flex-col md:flex-row items-center space-y-1 md:space-y-0 md:space-x-2 ${
-                      location.pathname === item.href
+                      location.pathname.includes(item.href.split('/')[1])
                         ? 'text-blue-600'
                         : 'text-gray-600 hover:text-blue-500'
                     }`}
@@ -71,4 +86,4 @@ function Layout({ children }: LayoutProps) {
   );
 }
 
-export default Layout
+export default Layout;

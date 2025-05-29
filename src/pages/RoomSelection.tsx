@@ -1,14 +1,27 @@
 import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { BedDouble } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { BedDouble, AlertTriangle } from 'lucide-react';
 import { useRoomStore } from '../stores/roomStore';
+import { useEmergencyStore } from '../stores/emergencyStore';
 
 function RoomSelection() {
   const { rooms, fetchRooms } = useRoomStore();
+  const { isEmergencyActive } = useEmergencyStore();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchRooms();
   }, [fetchRooms]);
+
+  useEffect(() => {
+    if (isEmergencyActive) {
+      navigate('/settings');
+    }
+  }, [isEmergencyActive, navigate]);
+
+  if (isEmergencyActive) {
+    return null;
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -36,4 +49,4 @@ function RoomSelection() {
   );
 }
 
-export default RoomSelection
+export default RoomSelection;
