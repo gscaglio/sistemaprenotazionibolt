@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Dashboard from './pages/Dashboard';
 import Calendar from './pages/Calendar';
+import RoomSelection from './pages/RoomSelection';
 import Bookings from './pages/Bookings';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
@@ -27,6 +28,16 @@ function App() {
         />
         <Route
           path="/calendar"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <RoomSelection />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/calendar/:roomId"
           element={
             <ProtectedRoute>
               <Layout>
