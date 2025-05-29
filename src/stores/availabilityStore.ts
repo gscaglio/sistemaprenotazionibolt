@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
+import { endOfMonth, parse, format } from 'date-fns';
 
 type Availability = Database['public']['Tables']['availability']['Row'];
 
@@ -21,7 +22,8 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const startDate = `${month}-01`;
-      const endDate = `${month}-31`;
+      const parsedDate = parse(month, 'yyyy-MM', new Date());
+      const endDate = format(endOfMonth(parsedDate), 'yyyy-MM-dd');
       
       const { data, error } = await supabase
         .from('availability')
@@ -67,13 +69,12 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
           onConflict: 'room_id,date',
           ignoreDuplicates: false 
         })
-        .select('*'); // Fixed: Explicitly select all columns
+        .select('*');
       
       if (error) throw error;
 
-      // Refresh the availability data after bulk update
       const currentState = get();
-      const month = updates[0]?.date?.substring(0, 7); // Get YYYY-MM from the first update
+      const month = updates[0]?.date?.substring(0, 7);
       if (month) {
         await currentState.fetchAvailability(month);
       }

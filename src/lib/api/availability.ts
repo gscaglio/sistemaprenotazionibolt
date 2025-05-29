@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import type { Database } from '../database.types';
+import { endOfMonth, parse, format } from 'date-fns';
 
 type Availability = Database['public']['Tables']['availability']['Row'];
 
@@ -17,7 +18,8 @@ export const availabilityApi = {
 
   getAvailability: async (month: string) => {
     const startDate = `${month}-01`;
-    const endDate = `${month}-31`;
+    const parsedDate = parse(month, 'yyyy-MM', new Date());
+    const endDate = format(endOfMonth(parsedDate), 'yyyy-MM-dd');
     
     const { data, error } = await supabase
       .from('availability')
