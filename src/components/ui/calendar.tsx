@@ -14,6 +14,15 @@ import toast from 'react-hot-toast';
 
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className, currentRoomId }: CalendarProps) {
   // ... (keeping all the existing state and hooks)
+  
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      // Require the mouse to move by 10 pixels before activating
+      activationConstraint: {
+        distance: 10,
+      },
+    })
+  );
 
   return (
     <div className="flex">
