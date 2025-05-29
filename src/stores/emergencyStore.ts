@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { availabilityApi } from '../lib/api/availability';
+import { format } from 'date-fns';
 
 interface EmergencyState {
   isEmergencyActive: boolean;
@@ -16,15 +17,12 @@ export const useEmergencyStore = create<EmergencyState>()(
       savedAvailability: null,
       activateEmergency: async () => {
         try {
-          // Get current month's availability
           const currentDate = new Date();
-          const month = currentDate.toISOString().slice(0, 7);
+          const month = format(currentDate, 'yyyy-MM');
           const availability = await availabilityApi.getAvailability(month);
           
-          // Save current state
           set({ savedAvailability: availability, isEmergencyActive: true });
           
-          // Disable all rooms
           const updates = availability.map(item => ({
             room_id: item.room_id,
             date: item.date,
@@ -43,12 +41,21 @@ export const useEmergencyStore = create<EmergencyState>()(
         const { savedAvailability } = get();
         if (savedAvailability) {
           try {
+            // Ripristina lo stato precedente
             await availabilityApi.bulkUpdateAvailability(savedAvailability);
+            
+            // Forza un aggiornamento dei dati dopo il ripristino
+            const currentDate = new Date();
+            const month = format(currentDate, 'yyyy-MM');
+            await availabilityApi.getAvailability(month);
+            
             set({ isEmergencyActive: false, savedAvailability: null });
           } catch (error) {
             console.error('Failed to deactivate emergency mode:', error);
             throw error;
           }
+        } else {
+          set({ isEmergencyActive: false });
         }
       }
     }),

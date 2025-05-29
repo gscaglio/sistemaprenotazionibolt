@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Calendar } from '../components/ui/calendar';
 import { useAvailabilityStore } from '../stores/availabilityStore';
 import { useRoomStore } from '../stores/roomStore';
+import { useEmergencyStore } from '../stores/emergencyStore';
 import { format } from 'date-fns';
 import { ArrowLeft } from 'lucide-react';
 
@@ -11,6 +12,7 @@ function CalendarPage() {
   const navigate = useNavigate();
   const { rooms, fetchRooms } = useRoomStore();
   const { fetchAvailability } = useAvailabilityStore();
+  const { isEmergencyActive } = useEmergencyStore();
 
   useEffect(() => {
     fetchRooms();
@@ -20,7 +22,7 @@ function CalendarPage() {
     if (roomId) {
       fetchAvailability(format(new Date(), 'yyyy-MM'));
     }
-  }, [roomId, fetchAvailability]);
+  }, [roomId, fetchAvailability, isEmergencyActive]); // Aggiungi isEmergencyActive come dipendenza
 
   const currentRoom = rooms.find(room => room.id === Number(roomId));
 
@@ -33,7 +35,7 @@ function CalendarPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-4">
           <button
-            onClick={() => navigate('/calendar')}
+            onClick={() => navigate('/')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -48,4 +50,4 @@ function CalendarPage() {
   );
 }
 
-export default CalendarPage
+export default CalendarPage;
