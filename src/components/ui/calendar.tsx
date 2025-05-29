@@ -259,7 +259,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                         !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
                         isToday(day) && 'border-2 border-blue-500',
                         isSelected && 'bg-blue-50 hover:bg-blue-100',
-                        isAvailable ? 'bg-green-50 hover:bg-green-100' : 'bg-red-50 hover:bg-red-100'
+                        isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300'
                       )}
                     >
                       <span className="block font-medium">{format(day, 'd')}</span>
