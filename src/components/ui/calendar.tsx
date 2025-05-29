@@ -24,6 +24,44 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     })
   );
 
+  const handleDragStart = (event: any) => {
+    const { active } = event;
+    if (!active) return;
+    
+    // Store the initial drag start date
+    const startDate = new Date(active.id);
+    setSelectedDateRange({ start: startDate, end: startDate });
+  };
+
+  const handleDragMove = (event: any) => {
+    const { active, over } = event;
+    if (!active || !over) return;
+    
+    // Update the end date as the user drags
+    const endDate = new Date(over.id);
+    setSelectedDateRange(prev => ({ ...prev, end: endDate }));
+  };
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+    if (!active || !over) return;
+    
+    // Finalize the date range selection
+    const startDate = new Date(active.id);
+    const endDate = new Date(over.id);
+    
+    // Ensure dates are in correct order
+    const start = startDate < endDate ? startDate : endDate;
+    const end = startDate < endDate ? endDate : startDate;
+    
+    setSelectedDateRange({ start, end });
+    
+    // If there's an onSelect callback, call it with the final date range
+    if (onSelect) {
+      onSelect({ start, end });
+    }
+  };
+
   return (
     <div className="flex">
       <div className="flex-grow overflow-auto">
