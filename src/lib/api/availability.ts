@@ -45,8 +45,7 @@ export const availabilityApi = {
   bulkUpdateAvailability: async (updates: Partial<Availability>[]) => {
     const { data, error } = await supabase
       .from('availability')
-      .upsert(updates)
-      .select();
+      .upsert(updates);
     if (error) throw error;
     return data;
   }
