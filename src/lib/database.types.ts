@@ -13,28 +13,28 @@ export interface Database {
         Row: {
           id: number
           name: string
+          slug: string
           base_price: number
-          max_adults: number
-          max_children: number
-          description: string
+          max_guests: number
+          active: boolean
           created_at: string
         }
         Insert: {
           id?: number
           name: string
+          slug: string
           base_price: number
-          max_adults: number
-          max_children: number
-          description: string
+          max_guests?: number
+          active?: boolean
           created_at?: string
         }
         Update: {
           id?: number
           name?: string
+          slug?: string
           base_price?: number
-          max_adults?: number
-          max_children?: number
-          description?: string
+          max_guests?: number
+          active?: boolean
           created_at?: string
         }
       }
@@ -43,106 +43,113 @@ export interface Database {
           id: number
           room_id: number
           date: string
-          status: 'available' | 'blocked' | 'booked'
+          available: boolean
           price_override: number | null
+          blocked_reason: string | null
+          notes: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: number
           room_id: number
           date: string
-          status: 'available' | 'blocked' | 'booked'
+          available?: boolean
           price_override?: number | null
+          blocked_reason?: string | null
+          notes?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: number
           room_id?: number
           date?: string
-          status?: 'available' | 'blocked' | 'booked'
+          available?: boolean
           price_override?: number | null
+          blocked_reason?: string | null
+          notes?: string | null
           created_at?: string
+          updated_at?: string
         }
       }
       bookings: {
         Row: {
           id: number
-          check_in: string
-          check_out: string
+          room_id: number
           guest_name: string
           guest_email: string
           guest_phone: string
-          adults_count: number
-          children_count: number
+          check_in: string
+          check_out: string
+          nights: number
+          adults: number
+          children: number
           total_amount: number
-          status: 'pending' | 'confirmed' | 'cancelled'
-          booking_type: 'single' | 'double'
+          status: string
+          payment_method: string | null
+          payment_intent_id: string | null
+          special_requests: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: number
-          check_in: string
-          check_out: string
+          room_id: number
           guest_name: string
           guest_email: string
           guest_phone: string
-          adults_count: number
-          children_count: number
+          check_in: string
+          check_out: string
+          nights: number
+          adults: number
+          children: number
           total_amount: number
-          status?: 'pending' | 'confirmed' | 'cancelled'
-          booking_type: 'single' | 'double'
+          status?: string
+          payment_method?: string | null
+          payment_intent_id?: string | null
+          special_requests?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: number
-          check_in?: string
-          check_out?: string
+          room_id?: number
           guest_name?: string
           guest_email?: string
           guest_phone?: string
-          adults_count?: number
-          children_count?: number
+          check_in?: string
+          check_out?: string
+          nights?: number
+          adults?: number
+          children?: number
           total_amount?: number
-          status?: 'pending' | 'confirmed' | 'cancelled'
-          booking_type?: 'single' | 'double'
+          status?: string
+          payment_method?: string | null
+          payment_intent_id?: string | null
+          special_requests?: string | null
           created_at?: string
-        }
-      }
-      booking_rooms: {
-        Row: {
-          id: number
-          booking_id: number
-          room_id: number
-        }
-        Insert: {
-          id?: number
-          booking_id: number
-          room_id: number
-        }
-        Update: {
-          id?: number
-          booking_id?: number
-          room_id?: number
+          updated_at?: string
         }
       }
       settings: {
         Row: {
-          id: number
           key: string
           value: Json
-          created_at: string
+          description: string | null
+          updated_at: string
         }
         Insert: {
-          id?: number
           key: string
           value: Json
-          created_at?: string
+          description?: string | null
+          updated_at?: string
         }
         Update: {
-          id?: number
           key?: string
           value?: Json
-          created_at?: string
+          description?: string | null
+          updated_at?: string
         }
       }
     }

@@ -4,7 +4,6 @@ import type { Database } from '../database.types';
 type Availability = Database['public']['Tables']['availability']['Row'];
 
 export const availabilityApi = {
-  // Public endpoints
   getPublicAvailability: async (startDate: string, endDate: string) => {
     const { data, error } = await supabase
       .from('availability')
@@ -16,7 +15,6 @@ export const availabilityApi = {
     return data;
   },
 
-  // Admin endpoints
   getAvailability: async (month: string) => {
     const startDate = `${month}-01`;
     const endDate = `${month}-31`;
@@ -45,7 +43,10 @@ export const availabilityApi = {
   bulkUpdateAvailability: async (updates: Partial<Availability>[]) => {
     const { data, error } = await supabase
       .from('availability')
-      .upsert(updates);
+      .upsert(updates, {
+        onConflict: 'room_id,date',
+        ignoreDuplicates: false
+      });
     if (error) throw error;
     return data;
   }
