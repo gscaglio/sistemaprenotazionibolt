@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday } from 'date-fns';
+import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isWithinInterval } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
@@ -16,89 +16,111 @@ interface CalendarProps {
   className?: string;
 }
 
-interface PriceModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  date: Date;
-  roomId: number;
-  currentPrice: number | null;
-  onSave: (price: number | null) => void;
+interface DateRangePickerProps {
+  startDate: Date | null;
+  endDate: Date | null;
+  onDateChange: (start: Date | null, end: Date | null) => void;
 }
 
-function PriceModal({ isOpen, onClose, date, roomId, currentPrice, onSave }: PriceModalProps) {
-  const [price, setPrice] = useState(currentPrice?.toString() || '');
+function DateRangePicker({ startDate, endDate, onDateChange }: DateRangePickerProps) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Dal</label>
+        <input
+          type="date"
+          value={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
+          onChange={(e) => onDateChange(e.target.value ? new Date(e.target.value) : null, endDate)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Al</label>
+        <input
+          type="date"
+          value={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
+          onChange={(e) => onDateChange(startDate, e.target.value ? new Date(e.target.value) : null)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+        />
+      </div>
+    </div>
+  );
+}
 
-  if (!isOpen) return null;
+interface BulkEditPanelProps {
+  selectedDates: { start: Date | null; end: Date | null };
+  selectedRoom: number | null;
+  onUpdatePrice: (price: number) => void;
+  onUpdateAvailability: (status: 'available' | 'blocked') => void;
+}
+
+function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAvailability }: BulkEditPanelProps) {
+  const [price, setPrice] = useState<string>('');
+
+  if (!selectedDates.start || !selectedRoom) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-96">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">
-            Prezzo per {format(date, 'dd MMMM yyyy', { locale: it })}
-          </h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X className="h-5 w-5" />
+    <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
+      <h3 className="text-lg font-semibold text-gray-900">
+        Modifica date selezionate
+      </h3>
+      
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Prezzo per notte
+          </label>
+          <div className="mt-1 relative rounded-md shadow-sm">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <span className="text-gray-500 sm:text-sm">€</span>
+            </div>
+            <input
+              type="number"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className="pl-7 block w-full rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+              placeholder="0.00"
+            />
+          </div>
+          <button
+            onClick={() => onUpdatePrice(Number(price))}
+            className="mt-2 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Aggiorna prezzo
           </button>
         </div>
-        <input
-          type="number"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          className="w-full p-2 border rounded mb-4"
-          placeholder="Inserisci il prezzo"
-        />
-        <div className="flex justify-end space-x-2">
-          <button
-            onClick={() => {
-              onSave(price ? Number(price) : null);
-              onClose();
-            }}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Salva
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-          >
-            Annulla
-          </button>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            Disponibilità
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => onUpdateAvailability('available')}
+              className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+            >
+              Apri
+            </button>
+            <button
+              onClick={() => onUpdateAvailability('blocked')}
+              className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+            >
+              Chiudi
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function DraggableDay({ day, status, roomId }: { day: Date; status: string; roomId: number }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: `${roomId}-${format(day, 'yyyy-MM-dd')}`,
-    data: { day, roomId },
-  });
-
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : undefined;
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className="cursor-move"
-    >
-      {format(day, 'd')}
-    </div>
-  );
-}
-
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-  const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
-  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date | null; end: Date | null }>({
+    start: null,
+    end: null
+  });
+  const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   
   const { rooms } = useRoomStore();
   const { availability, updateBulkAvailability } = useAvailabilityStore();
@@ -110,6 +132,50 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   const previousMonth = () => setCurrentDate(addMonths(currentDate, -1));
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
 
+  const handleDateRangeChange = (start: Date | null, end: Date | null) => {
+    setSelectedDateRange({ start, end });
+  };
+
+  const handleBulkPriceUpdate = async (price: number) => {
+    if (!selectedDateRange.start || !selectedDateRange.end || !selectedRoom) return;
+
+    const daysToUpdate = eachDayOfInterval({
+      start: selectedDateRange.start,
+      end: selectedDateRange.end
+    }).map(date => ({
+      room_id: selectedRoom,
+      date: format(date, 'yyyy-MM-dd'),
+      price_override: price
+    }));
+
+    try {
+      await availabilityApi.bulkUpdateAvailability(daysToUpdate);
+      toast.success('Prezzi aggiornati con successo');
+    } catch (error) {
+      toast.error('Errore durante l\'aggiornamento dei prezzi');
+    }
+  };
+
+  const handleBulkAvailabilityUpdate = async (status: 'available' | 'blocked') => {
+    if (!selectedDateRange.start || !selectedDateRange.end || !selectedRoom) return;
+
+    const daysToUpdate = eachDayOfInterval({
+      start: selectedDateRange.start,
+      end: selectedDateRange.end
+    }).map(date => ({
+      room_id: selectedRoom,
+      date: format(date, 'yyyy-MM-dd'),
+      status
+    }));
+
+    try {
+      await availabilityApi.bulkUpdateAvailability(daysToUpdate);
+      toast.success('Disponibilità aggiornata con successo');
+    } catch (error) {
+      toast.error('Errore durante l\'aggiornamento della disponibilità');
+    }
+  };
+
   const getAvailabilityStatus = (date: Date, roomId: number) => {
     const dayAvailability = availability.find(
       a => a.room_id === roomId && isSameDay(new Date(a.date), date)
@@ -117,181 +183,116 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     return dayAvailability?.status || 'available';
   };
 
-  const handleDateClick = async (date: Date, roomId: number) => {
-    if (mode === 'admin') {
-      const currentStatus = getAvailabilityStatus(date, roomId);
-      const newStatus = currentStatus === 'available' ? 'blocked' : 'available';
-      
-      try {
-        await availabilityApi.bulkUpdateAvailability([{
-          room_id: roomId,
-          date: format(date, 'yyyy-MM-dd'),
-          status: newStatus
-        }]);
-        toast.success('Disponibilità aggiornata');
-      } catch (error) {
-        toast.error('Errore durante l\'aggiornamento');
-      }
-    } else if (onSelect) {
-      if (mode === 'single') {
-        onSelect([date]);
-      } else if (mode === 'range') {
-        if (selectedDates.length === 0 || selectedDates.length === 2) {
-          onSelect([date]);
-        } else {
-          onSelect([selectedDates[0], date].sort((a, b) => a.getTime() - b.getTime()));
-        }
-      }
-    }
-  };
-
-  const handlePriceUpdate = async (price: number | null) => {
-    if (!selectedDay || !selectedRoomId) return;
-
-    try {
-      const formattedDate = format(selectedDay, 'yyyy-MM-dd');
-      const existingAvailability = availability.find(
-        a => a.room_id === selectedRoomId && a.date === formattedDate
-      );
-
-      if (existingAvailability) {
-        // Update existing availability record
-        await availabilityApi.bulkUpdateAvailability([{
-          id: existingAvailability.id,
-          room_id: selectedRoomId,
-          date: formattedDate,
-          price_override: price,
-          status: existingAvailability.status || 'available'
-        }]);
-      } else {
-        // Create new availability record
-        await availabilityApi.bulkUpdateAvailability([{
-          room_id: selectedRoomId,
-          date: formattedDate,
-          price_override: price,
-          status: 'available'
-        }]);
-      }
-      
-      toast.success('Prezzo aggiornato');
-    } catch (error) {
-      toast.error('Errore durante l\'aggiornamento del prezzo');
-    }
-  };
-
-  const handleDragEnd = async (event: any) => {
-    if (!event.over || !event.active) return;
-
-    const { day: startDay, roomId } = event.active.data.current;
-    const endDay = new Date(event.over.id.split('-')[1]);
-    
-    const daysToUpdate = eachDayOfInterval({
-      start: startDay,
-      end: endDay
-    }).map(date => ({
-      room_id: roomId,
-      date: format(date, 'yyyy-MM-dd'),
-      status: 'blocked'
-    }));
-
-    try {
-      await availabilityApi.bulkUpdateAvailability(daysToUpdate);
-      toast.success('Disponibilità aggiornata');
-    } catch (error) {
-      toast.error('Errore durante l\'aggiornamento');
-    }
+  const isDateSelected = (date: Date) => {
+    if (!selectedDateRange.start || !selectedDateRange.end) return false;
+    return isWithinInterval(date, {
+      start: selectedDateRange.start,
+      end: selectedDateRange.end
+    });
   };
 
   return (
-    <div className={cn('p-4', className)}>
-      <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={previousMonth}
-          className="p-2 hover:bg-gray-100 rounded-full"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <h2 className="text-lg font-semibold">
-          {format(currentDate, 'MMMM yyyy', { locale: it })}
-        </h2>
-        <button
-          onClick={nextMonth}
-          className="p-2 hover:bg-gray-100 rounded-full"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="grid grid-cols-7 gap-1">
-        {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map((day) => (
-          <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
-            {day}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="md:col-span-2">
+        <div className={cn('bg-white rounded-lg shadow-lg p-6', className)}>
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={previousMonth}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <h2 className="text-xl font-semibold text-gray-900">
+              {format(currentDate, 'MMMM yyyy', { locale: it })}
+            </h2>
+            <button
+              onClick={nextMonth}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
           </div>
-        ))}
-      </div>
 
-      {rooms.map(room => (
-        <div key={room.id} className="mt-8">
-          <h3 className="text-lg font-semibold mb-4">{room.name}</h3>
-          <div className="grid grid-cols-7 gap-1">
-            {days.map(day => {
-              const status = getAvailabilityStatus(day, room.id);
-              const isSelected = selectedDates.some(date => isSameDay(date, day));
-              
-              return (
-                <button
-                  key={day.toString()}
-                  onClick={() => {
-                    if (mode === 'admin') {
-                      setSelectedDay(day);
-                      setSelectedRoomId(room.id);
-                      setCurrentPrice(availability.find(
-                        a => a.room_id === room.id && isSameDay(new Date(a.date), day)
-                      )?.price_override || null);
-                      setIsPriceModalOpen(true);
-                    } else {
-                      handleDateClick(day, room.id);
-                    }
-                  }}
-                  className={cn(
-                    'h-14 w-full rounded-lg text-sm p-2 transition-colors relative',
-                    !isSameMonth(day, currentDate) && 'text-gray-400',
-                    isToday(day) && 'border-2 border-blue-500',
-                    isSelected && 'bg-blue-100',
-                    status === 'available' && 'bg-green-100 hover:bg-green-200',
-                    status === 'blocked' && 'bg-red-100 hover:bg-red-200',
-                    status === 'booked' && 'bg-blue-100 hover:bg-blue-200'
-                  )}
-                >
-                  {mode === 'admin' ? (
-                    <DraggableDay day={day} status={status} roomId={room.id} />
-                  ) : (
-                    format(day, 'd')
-                  )}
-                  {availability.find(
+          <div className="grid grid-cols-7 gap-1 mb-4">
+            {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map((day) => (
+              <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {rooms.map(room => (
+            <div key={room.id} className="mb-8">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">{room.name}</h3>
+              <div className="grid grid-cols-7 gap-1">
+                {days.map(day => {
+                  const status = getAvailabilityStatus(day, room.id);
+                  const isSelected = isDateSelected(day);
+                  const dayPrice = availability.find(
                     a => a.room_id === room.id && 
-                    isSameDay(new Date(a.date), day) && 
-                    a.price_override
-                  ) && (
-                    <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-600">
-                      €
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                    isSameDay(new Date(a.date), day)
+                  )?.price_override;
+                  
+                  return (
+                    <button
+                      key={day.toString()}
+                      onClick={() => {
+                        setSelectedRoom(room.id);
+                        if (!selectedDateRange.start) {
+                          setSelectedDateRange({ start: day, end: null });
+                        } else if (!selectedDateRange.end) {
+                          setSelectedDateRange(prev => ({
+                            start: prev.start,
+                            end: day
+                          }));
+                        } else {
+                          setSelectedDateRange({ start: day, end: null });
+                        }
+                      }}
+                      className={cn(
+                        'h-16 w-full rounded-lg text-sm p-2 transition-all relative',
+                        !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
+                        isToday(day) && 'border-2 border-blue-500',
+                        isSelected && 'bg-blue-50 hover:bg-blue-100',
+                        status === 'available' && 'bg-green-50 hover:bg-green-100',
+                        status === 'blocked' && 'bg-red-50 hover:bg-red-100',
+                        status === 'booked' && 'bg-yellow-50 hover:bg-yellow-100'
+                      )}
+                    >
+                      <span className="block font-medium">{format(day, 'd')}</span>
+                      {dayPrice && (
+                        <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-700">
+                          €{dayPrice}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
 
-      <PriceModal
-        isOpen={isPriceModalOpen}
-        onClose={() => setIsPriceModalOpen(false)}
-        date={selectedDay!}
-        roomId={selectedRoomId!}
-        currentPrice={currentPrice}
-        onSave={handlePriceUpdate}
-      />
+      <div className="space-y-6">
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">
+            Seleziona periodo
+          </h3>
+          <DateRangePicker
+            startDate={selectedDateRange.start}
+            endDate={selectedDateRange.end}
+            onDateChange={handleDateRangeChange}
+          />
+        </div>
+
+        <BulkEditPanel
+          selectedDates={selectedDateRange}
+          selectedRoom={selectedRoom}
+          onUpdatePrice={handleBulkPriceUpdate}
+          onUpdateAvailability={handleBulkAvailabilityUpdate}
+        />
+      </div>
     </div>
   );
 }
