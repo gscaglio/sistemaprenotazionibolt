@@ -1,7 +1,8 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isWithinInterval } from 'date-fns';
+import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isWithinInterval, isBefore } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useState, useEffect } from 'react';
+import { DndContext, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -120,9 +121,17 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     end: null
   });
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   
   const { rooms } = useRoomStore();
   const { availability, fetchAvailability } = useAvailabilityStore();
+
+  const mouseSensor = useSensor(MouseSensor, {
+    activationConstraint: {
+      distance: 0,
+    },
+  });
+  const sensors = useSensors(mouseSensor);
 
   useEffect(() => {
     const month = format(currentDate, 'yyyy-MM');
@@ -180,7 +189,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       toast.success('Disponibilità aggiornata con successo');
       const month = format(currentDate, 'yyyy-MM');
       fetchAvailability(month);
-      setSelectedDateRange({ start: null, end: null }); // Reset selection after update
+      setSelectedDateRange({ start: null, end: null });
     } catch (error) {
       toast.error('Errore durante l\'aggiornamento della disponibilità');
     }
@@ -193,12 +202,27 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     return dayAvailability?.available ?? true;
   };
 
-  const isDateSelected = (date: Date) => {
-    if (!selectedDateRange.start || !selectedDateRange.end) return false;
-    return isWithinInterval(date, {
-      start: selectedDateRange.start,
-      end: selectedDateRange.end
+  const handleDragStart = (event: any) => {
+    const { date, roomId } = event.active.data.current;
+    setSelectedRoom(roomId);
+    setSelectedDateRange({ start: date, end: date });
+    setIsDragging(true);
+  };
+
+  const handleDragMove = (event: any) => {
+    if (!isDragging || !selectedDateRange.start) return;
+    
+    const { date } = event.active.data.current;
+    const start = selectedDateRange.start;
+    
+    setSelectedDateRange({
+      start: isBefore(start, date) ? start : date,
+      end: isBefore(start, date) ? date : start
     });
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
   };
 
   return (
@@ -231,54 +255,71 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
             ))}
           </div>
 
-          {rooms.map(room => (
-            <div key={room.id} className="mb-8">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">{room.name}</h3>
-              <div className="grid grid-cols-7 gap-1">
-                {days.map(day => {
-                  const isAvailable = getAvailabilityStatus(day, room.id);
-                  const isSelected = isDateSelected(day);
-                  const dayPrice = availability.find(
-                    a => a.room_id === room.id && 
-                    isSameDay(new Date(a.date), day)
-                  )?.price_override;
-                  
-                  return (
-                    <button
-                      key={day.toString()}
-                      onClick={() => {
-                        setSelectedRoom(room.id);
-                        if (!selectedDateRange.start) {
-                          setSelectedDateRange({ start: day, end: null });
-                        } else if (!selectedDateRange.end) {
-                          setSelectedDateRange(prev => ({
-                            start: prev.start,
-                            end: day
-                          }));
-                        } else {
-                          setSelectedDateRange({ start: day, end: null });
-                        }
-                      }}
-                      className={cn(
-                        'h-16 w-full rounded-lg text-sm p-2 transition-all relative',
-                        !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
-                        isToday(day) && 'border-2 border-blue-500',
-                        isSelected && 'bg-blue-200 hover:bg-blue-300',
-                        !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300')
-                      )}
-                    >
-                      <span className="block font-medium">{format(day, 'd')}</span>
-                      {dayPrice && (
-                        <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-700">
-                          €{dayPrice}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
+            onDragEnd={handleDragEnd}
+          >
+            {rooms.map(room => (
+              <div key={room.id} className="mb-8">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">{room.name}</h3>
+                <div className="grid grid-cols-7 gap-1">
+                  {days.map(day => {
+                    const isAvailable = getAvailabilityStatus(day, room.id);
+                    const isSelected = selectedDateRange.start && selectedDateRange.end && 
+                      isWithinInterval(day, {
+                        start: selectedDateRange.start,
+                        end: selectedDateRange.end
+                      });
+                    const dayPrice = availability.find(
+                      a => a.room_id === room.id && 
+                      isSameDay(new Date(a.date), day)
+                    )?.price_override;
+
+                    return (
+                      <div
+                        key={day.toString()}
+                        data-date={format(day, 'yyyy-MM-dd')}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', '');
+                          handleDragStart({
+                            active: {
+                              data: { current: { date: day, roomId: room.id } }
+                            }
+                          });
+                        }}
+                        onDragEnter={(e) => {
+                          e.preventDefault();
+                          handleDragMove({
+                            active: {
+                              data: { current: { date: day, roomId: room.id } }
+                            }
+                          });
+                        }}
+                        onDragEnd={handleDragEnd}
+                        className={cn(
+                          'h-16 w-full rounded-lg text-sm p-2 transition-all relative cursor-pointer select-none',
+                          !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
+                          isToday(day) && 'border-2 border-blue-500',
+                          isSelected && 'bg-blue-200 hover:bg-blue-300',
+                          !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300')
+                        )}
+                      >
+                        <span className="block font-medium">{format(day, 'd')}</span>
+                        {dayPrice && (
+                          <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-700">
+                            €{dayPrice}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </DndContext>
         </div>
       </div>
 
