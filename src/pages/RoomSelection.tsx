@@ -27,7 +27,6 @@ function RoomSelection() {
               </div>
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">{room.name}</h2>
-                <p className="text-gray-600">€{room.base_price} per notte</p>
               </div>
             </div>
           </Link>
