@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { stripe } from '../stripe';
+import { notificationService } from '../notifications';
 import type { Database } from '../database.types';
 
 type Booking = Database['public']['Tables']['bookings']['Row'];
@@ -39,9 +40,22 @@ export const bookingsApi = {
       .from('bookings')
       .update({ status: 'confirmed' })
       .eq('payment_intent_id', paymentIntentId)
-      .select()
+      .select('*, rooms(*)')
       .single();
+
     if (error) throw error;
+
+    // Send notifications
+    try {
+      await Promise.all([
+        notificationService.sendWhatsAppNotification(data),
+        notificationService.sendEmailToOwner(data)
+      ]);
+    } catch (error) {
+      console.error('Failed to send notifications:', error);
+      // Continue even if notifications fail
+    }
+
     return data;
   },
 
