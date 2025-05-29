@@ -154,7 +154,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
 
     const daysToUpdate = eachDayOfInterval({
       start: selectedDateRange.start,
-      end: selectedDateRange.end
+      end: selectedDateRange.end || selectedDateRange.start
     }).map(date => ({
       room_id: selectedRoom,
       date: format(date, 'yyyy-MM-dd'),
@@ -172,11 +172,11 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleBulkAvailabilityUpdate = async (available: boolean) => {
-    if (!selectedDateRange.start || !selectedDateRange.end || !selectedRoom) return;
+    if (!selectedDateRange.start || !selectedRoom) return;
 
     const daysToUpdate = eachDayOfInterval({
       start: selectedDateRange.start,
-      end: selectedDateRange.end
+      end: selectedDateRange.end || selectedDateRange.start
     }).map(date => ({
       room_id: selectedRoom,
       date: format(date, 'yyyy-MM-dd'),
@@ -225,6 +225,22 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     setIsDragging(false);
   };
 
+  const handleDateClick = (day: Date, roomId: number) => {
+    if (isDragging) return;
+    
+    setSelectedRoom(roomId);
+    if (!selectedDateRange.start) {
+      setSelectedDateRange({ start: day, end: null });
+    } else if (!selectedDateRange.end && !isSameDay(selectedDateRange.start, day)) {
+      setSelectedDateRange(prev => ({
+        start: prev.start,
+        end: day
+      }));
+    } else {
+      setSelectedDateRange({ start: day, end: null });
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
       <div className="md:col-span-2">
@@ -267,11 +283,13 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                 <div className="grid grid-cols-7 gap-1">
                   {days.map(day => {
                     const isAvailable = getAvailabilityStatus(day, room.id);
-                    const isSelected = selectedDateRange.start && selectedDateRange.end && 
-                      isWithinInterval(day, {
-                        start: selectedDateRange.start,
-                        end: selectedDateRange.end
-                      });
+                    const isSelected = selectedDateRange.start && 
+                      (selectedDateRange.end 
+                        ? isWithinInterval(day, {
+                            start: selectedDateRange.start,
+                            end: selectedDateRange.end
+                          })
+                        : isSameDay(day, selectedDateRange.start));
                     const dayPrice = availability.find(
                       a => a.room_id === room.id && 
                       isSameDay(new Date(a.date), day)
@@ -282,6 +300,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                         key={day.toString()}
                         data-date={format(day, 'yyyy-MM-dd')}
                         draggable
+                        onClick={() => handleDateClick(day, room.id)}
                         onDragStart={(e) => {
                           e.dataTransfer.setData('text/plain', '');
                           handleDragStart({
