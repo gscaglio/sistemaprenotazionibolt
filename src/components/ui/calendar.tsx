@@ -141,7 +141,7 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
 }
 
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className, currentRoomId }: CalendarProps) {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [displayedMonths, setDisplayedMonths] = useState([new Date()]);
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date | null; end: Date | null }>({
     start: null,
     end: null
@@ -160,16 +160,28 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   const sensors = useSensors(mouseSensor);
 
   useEffect(() => {
-    const month = format(currentDate, 'yyyy-MM');
-    fetchAvailability(month);
-  }, [currentDate, fetchAvailability]);
+    displayedMonths.forEach(date => {
+      const month = format(date, 'yyyy-MM');
+      fetchAvailability(month);
+    });
+  }, [displayedMonths, fetchAvailability]);
 
-  const firstDayOfMonth = startOfMonth(currentDate);
-  const lastDayOfMonth = endOfMonth(currentDate);
-  const days = eachDayOfInterval({ start: firstDayOfMonth, end: lastDayOfMonth });
+  const addMonth = () => {
+    setDisplayedMonths(months => {
+      const lastMonth = months[months.length - 1];
+      const nextMonth = addMonths(lastMonth, 1);
+      return [...months, nextMonth];
+    });
+  };
 
-  const previousMonth = () => setCurrentDate(addMonths(currentDate, -1));
-  const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
+  const removeMonth = () => {
+    setDisplayedMonths(months => {
+      if (months.length > 1) {
+        return months.slice(0, -1);
+      }
+      return months;
+    });
+  };
 
   const handleDateRangeChange = (start: Date | null, end: Date | null) => {
     if (!isEmergencyActive) {
@@ -205,8 +217,10 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     try {
       await availabilityApi.bulkUpdateAvailability(updates);
       toast.success('Prezzi aggiornati con successo');
-      const month = format(currentDate, 'yyyy-MM');
-      await fetchAvailability(month);
+      displayedMonths.forEach(date => {
+        const month = format(date, 'yyyy-MM');
+        fetchAvailability(month);
+      });
       setSelectedDateRange({ start: null, end: null });
     } catch (error) {
       console.error('Error updating prices:', error);
@@ -235,8 +249,10 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
       toast.success('Disponibilità aggiornata con successo');
-      const month = format(currentDate, 'yyyy-MM');
-      fetchAvailability(month);
+      displayedMonths.forEach(date => {
+        const month = format(date, 'yyyy-MM');
+        fetchAvailability(month);
+      });
       setSelectedDateRange({ start: null, end: null });
     } catch (error) {
       toast.error('Errore durante l\'aggiornamento della disponibilità');
@@ -295,34 +311,118 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   const currentRoom = rooms.find(room => room.id === currentRoomId);
   if (!currentRoom) return null;
 
+  const renderMonth = (currentDate: Date) => {
+    const firstDayOfMonth = startOfMonth(currentDate);
+    const lastDayOfMonth = endOfMonth(currentDate);
+    const days = eachDayOfInterval({ start: firstDayOfMonth, end: lastDayOfMonth });
+
+    return (
+      <div key={format(currentDate, 'yyyy-MM')} className="mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">
+            {format(currentDate, 'MMMM yyyy', { locale: it })}
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 mb-4">
+          {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map((day) => (
+            <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+              {day}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {days.map(day => {
+            const isAvailable = getAvailabilityStatus(day, currentRoomId);
+            const isSelected = selectedDateRange.start && 
+              (selectedDateRange.end 
+                ? isWithinInterval(day, {
+                    start: selectedDateRange.start,
+                    end: selectedDateRange.end
+                  })
+                : isSameDay(day, selectedDateRange.start));
+            const dayAvailability = availability.find(
+              a => a.room_id === currentRoomId && 
+              isSameDay(new Date(a.date), day)
+            );
+            const dayPrice = dayAvailability?.price_override || currentRoom.base_price;
+
+            return (
+              <div
+                key={day.toString()}
+                data-date={format(day, 'yyyy-MM-dd')}
+                draggable={!isEmergencyActive}
+                onClick={() => handleDateClick(day)}
+                onDragStart={(e) => {
+                  if (isEmergencyActive) {
+                    e.preventDefault();
+                    return;
+                  }
+                  e.dataTransfer.setData('text/plain', '');
+                  handleDragStart({
+                    active: {
+                      data: { current: { date: day } }
+                    }
+                  });
+                }}
+                onDragEnter={(e) => {
+                  if (isEmergencyActive) {
+                    e.preventDefault();
+                    return;
+                  }
+                  e.preventDefault();
+                  handleDragMove({
+                    active: {
+                      data: { current: { date: day } }
+                    }
+                  });
+                }}
+                onDragEnd={handleDragEnd}
+                className={cn(
+                  'h-16 w-full rounded-lg text-sm p-2 transition-all relative select-none',
+                  !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
+                  isToday(day) && 'border-2 border-blue-500',
+                  isSelected && 'bg-blue-200 hover:bg-blue-300',
+                  !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300'),
+                  isEmergencyActive ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                )}
+              >
+                <span className="block font-medium">{format(day, 'd')}</span>
+                <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-700">
+                  €{dayPrice}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
       <div className="md:col-span-2">
         <div className={cn('bg-white rounded-lg shadow-lg p-6', className)}>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex justify-end space-x-2 mb-6">
             <button
-              onClick={previousMonth}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              onClick={removeMonth}
+              disabled={displayedMonths.length === 1}
+              className={cn(
+                "px-3 py-1 rounded-md text-sm",
+                displayedMonths.length === 1 
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-red-100 text-red-600 hover:bg-red-200"
+              )}
             >
-              <ChevronLeft className="h-5 w-5" />
+              Mostra meno mesi
             </button>
-            <h2 className="text-xl font-semibold text-gray-900">
-              {format(currentDate, 'MMMM yyyy', { locale: it })}
-            </h2>
             <button
-              onClick={nextMonth}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              onClick={addMonth}
+              className="px-3 py-1 rounded-md text-sm bg-blue-100 text-blue-600 hover:bg-blue-200"
             >
-              <ChevronRight className="h-5 w-5" />
+              Mostra più mesi
             </button>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 mb-4">
-            {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map((day) => (
-              <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
-                {day}
-              </div>
-            ))}
           </div>
 
           <DndContext
@@ -331,70 +431,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
           >
-            <div className="grid grid-cols-7 gap-1">
-              {days.map(day => {
-                const isAvailable = getAvailabilityStatus(day, currentRoomId);
-                const isSelected = selectedDateRange.start && 
-                  (selectedDateRange.end 
-                    ? isWithinInterval(day, {
-                        start: selectedDateRange.start,
-                        end: selectedDateRange.end
-                      })
-                    : isSameDay(day, selectedDateRange.start));
-                const dayAvailability = availability.find(
-                  a => a.room_id === currentRoomId && 
-                  isSameDay(new Date(a.date), day)
-                );
-                const dayPrice = dayAvailability?.price_override || currentRoom.base_price;
-
-                return (
-                  <div
-                    key={day.toString()}
-                    data-date={format(day, 'yyyy-MM-dd')}
-                    draggable={!isEmergencyActive}
-                    onClick={() => handleDateClick(day)}
-                    onDragStart={(e) => {
-                      if (isEmergencyActive) {
-                        e.preventDefault();
-                        return;
-                      }
-                      e.dataTransfer.setData('text/plain', '');
-                      handleDragStart({
-                        active: {
-                          data: { current: { date: day } }
-                        }
-                      });
-                    }}
-                    onDragEnter={(e) => {
-                      if (isEmergencyActive) {
-                        e.preventDefault();
-                        return;
-                      }
-                      e.preventDefault();
-                      handleDragMove({
-                        active: {
-                          data: { current: { date: day } }
-                        }
-                      });
-                    }}
-                    onDragEnd={handleDragEnd}
-                    className={cn(
-                      'h-16 w-full rounded-lg text-sm p-2 transition-all relative select-none',
-                      !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
-                      isToday(day) && 'border-2 border-blue-500',
-                      isSelected && 'bg-blue-200 hover:bg-blue-300',
-                      !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300'),
-                      isEmergencyActive ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
-                    )}
-                  >
-                    <span className="block font-medium">{format(day, 'd')}</span>
-                    <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-700">
-                      €{dayPrice}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+            {displayedMonths.map(month => renderMonth(month))}
           </DndContext>
         </div>
       </div>
