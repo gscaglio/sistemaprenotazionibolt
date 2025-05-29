@@ -6,6 +6,7 @@ import { DndContext, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
+import { useEmergencyStore } from '../../stores/emergencyStore';
 import { availabilityApi } from '../../lib/api/availability';
 import toast from 'react-hot-toast';
 
@@ -58,6 +59,7 @@ interface BulkEditPanelProps {
 function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAvailability }: BulkEditPanelProps) {
   const [price, setPrice] = useState<string>('');
   const { rooms } = useRoomStore();
+  const { isEmergencyActive } = useEmergencyStore();
 
   if (!selectedDates.start || !selectedRoom) return null;
 
@@ -85,11 +87,18 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
               onChange={(e) => setPrice(e.target.value)}
               className="pl-7 block w-full rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500"
               placeholder={defaultPrice.toString()}
+              disabled={isEmergencyActive}
             />
           </div>
           <button
             onClick={() => onUpdatePrice(Number(price) || defaultPrice)}
-            className="mt-2 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className={cn(
+              "mt-2 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white",
+              isEmergencyActive 
+                ? "bg-gray-400 cursor-not-allowed" 
+                : "bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            )}
+            disabled={isEmergencyActive}
           >
             Aggiorna prezzo
           </button>
@@ -102,13 +111,25 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => onUpdateAvailability(true)}
-              className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+              className={cn(
+                "inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white",
+                isEmergencyActive 
+                  ? "bg-gray-400 cursor-not-allowed" 
+                  : "bg-green-600 hover:bg-green-700"
+              )}
+              disabled={isEmergencyActive}
             >
               Apri
             </button>
             <button
               onClick={() => onUpdateAvailability(false)}
-              className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+              className={cn(
+                "inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white",
+                isEmergencyActive 
+                  ? "bg-gray-400 cursor-not-allowed" 
+                  : "bg-red-600 hover:bg-red-700"
+              )}
+              disabled={isEmergencyActive}
             >
               Chiudi
             </button>
@@ -129,6 +150,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   
   const { rooms } = useRoomStore();
   const { availability, fetchAvailability } = useAvailabilityStore();
+  const { isEmergencyActive } = useEmergencyStore();
 
   const mouseSensor = useSensor(MouseSensor, {
     activationConstraint: {
@@ -150,10 +172,13 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
 
   const handleDateRangeChange = (start: Date | null, end: Date | null) => {
-    setSelectedDateRange({ start, end });
+    if (!isEmergencyActive) {
+      setSelectedDateRange({ start, end });
+    }
   };
 
   const handleBulkPriceUpdate = async (price: number) => {
+    if (isEmergencyActive) return;
     if (!selectedDateRange.start || !currentRoomId) return;
 
     const daysToUpdate = eachDayOfInterval({
@@ -177,6 +202,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleBulkAvailabilityUpdate = async (available: boolean) => {
+    if (isEmergencyActive) return;
     if (!selectedDateRange.start || !currentRoomId) return;
 
     const currentRoom = rooms.find(room => room.id === currentRoomId);
@@ -212,13 +238,14 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleDragStart = (event: any) => {
+    if (isEmergencyActive) return;
     const { date } = event.active.data.current;
     setSelectedDateRange({ start: date, end: date });
     setIsDragging(true);
   };
 
   const handleDragMove = (event: any) => {
-    if (!isDragging || !selectedDateRange.start) return;
+    if (isEmergencyActive || !isDragging || !selectedDateRange.start) return;
     
     const { date } = event.active.data.current;
     const start = selectedDateRange.start;
@@ -230,11 +257,13 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleDragEnd = () => {
-    setIsDragging(false);
+    if (!isEmergencyActive) {
+      setIsDragging(false);
+    }
   };
 
   const handleDateClick = (day: Date) => {
-    if (isDragging) return;
+    if (isEmergencyActive || isDragging) return;
     
     if (!selectedDateRange.start) {
       setSelectedDateRange({ start: day, end: null });
@@ -309,9 +338,13 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                   <div
                     key={day.toString()}
                     data-date={format(day, 'yyyy-MM-dd')}
-                    draggable
+                    draggable={!isEmergencyActive}
                     onClick={() => handleDateClick(day)}
                     onDragStart={(e) => {
+                      if (isEmergencyActive) {
+                        e.preventDefault();
+                        return;
+                      }
                       e.dataTransfer.setData('text/plain', '');
                       handleDragStart({
                         active: {
@@ -320,6 +353,10 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                       });
                     }}
                     onDragEnter={(e) => {
+                      if (isEmergencyActive) {
+                        e.preventDefault();
+                        return;
+                      }
                       e.preventDefault();
                       handleDragMove({
                         active: {
@@ -329,11 +366,12 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                     }}
                     onDragEnd={handleDragEnd}
                     className={cn(
-                      'h-16 w-full rounded-lg text-sm p-2 transition-all relative cursor-pointer select-none',
+                      'h-16 w-full rounded-lg text-sm p-2 transition-all relative select-none',
                       !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
                       isToday(day) && 'border-2 border-blue-500',
                       isSelected && 'bg-blue-200 hover:bg-blue-300',
-                      !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300')
+                      !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300'),
+                      isEmergencyActive ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
                     )}
                   >
                     <span className="block font-medium">{format(day, 'd')}</span>
