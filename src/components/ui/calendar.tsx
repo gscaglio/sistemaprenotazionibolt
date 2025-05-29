@@ -73,7 +73,7 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            Prezzo per notte (Default: €{defaultPrice})
+            Prezzo per notte
           </label>
           <div className="mt-1 relative rounded-md shadow-sm">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -299,10 +299,11 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                         end: selectedDateRange.end
                       })
                     : isSameDay(day, selectedDateRange.start));
-                const dayPrice = availability.find(
+                const dayAvailability = availability.find(
                   a => a.room_id === currentRoomId && 
                   isSameDay(new Date(a.date), day)
-                )?.price_override;
+                );
+                const dayPrice = dayAvailability?.price_override || currentRoom.base_price;
 
                 return (
                   <div
@@ -336,11 +337,9 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                     )}
                   >
                     <span className="block font-medium">{format(day, 'd')}</span>
-                    {dayPrice && (
-                      <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-700">
-                        €{dayPrice}
-                      </span>
-                    )}
+                    <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-700">
+                      €{dayPrice}
+                    </span>
                   </div>
                 );
               })}
