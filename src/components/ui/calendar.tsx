@@ -138,6 +138,14 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     fetchAvailability(month);
   }, [currentDate, fetchAvailability]);
 
+  const getDefaultPrice = (roomId: number) => {
+    switch (roomId) {
+      case 1: return 55; // Caryophyllus
+      case 2: return 60; // Rosales
+      default: return 0;
+    }
+  };
+
   const firstDayOfMonth = startOfMonth(currentDate);
   const lastDayOfMonth = endOfMonth(currentDate);
   const days = eachDayOfInterval({ start: firstDayOfMonth, end: lastDayOfMonth });
@@ -158,7 +166,8 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     }).map(date => ({
       room_id: selectedRoom,
       date: format(date, 'yyyy-MM-dd'),
-      price_override: price
+      price_override: price,
+      available: true
     }));
 
     try {
@@ -181,7 +190,8 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       room_id: selectedRoom,
       date: format(date, 'yyyy-MM-dd'),
       available,
-      blocked_reason: available ? null : 'manual_block'
+      blocked_reason: available ? null : 'manual_block',
+      price_override: available ? getDefaultPrice(selectedRoom) : null
     }));
 
     try {
