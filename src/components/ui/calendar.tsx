@@ -155,6 +155,8 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
       toast.success('Prezzi aggiornati con successo');
+      const month = format(currentDate, 'yyyy-MM');
+      fetchAvailability(month);
     } catch (error) {
       toast.error('Errore durante l\'aggiornamento dei prezzi');
     }
@@ -176,6 +178,9 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
       toast.success('Disponibilità aggiornata con successo');
+      const month = format(currentDate, 'yyyy-MM');
+      fetchAvailability(month);
+      setSelectedDateRange({ start: null, end: null }); // Reset selection after update
     } catch (error) {
       toast.error('Errore durante l\'aggiornamento della disponibilità');
     }
@@ -258,8 +263,8 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                         'h-16 w-full rounded-lg text-sm p-2 transition-all relative',
                         !isSameMonth(day, currentDate) && 'text-gray-400 bg-gray-50',
                         isToday(day) && 'border-2 border-blue-500',
-                        isSelected && 'bg-blue-50 hover:bg-blue-100',
-                        isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300'
+                        isSelected && 'bg-blue-200 hover:bg-blue-300',
+                        !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300')
                       )}
                     >
                       <span className="block font-medium">{format(day, 'd')}</span>
