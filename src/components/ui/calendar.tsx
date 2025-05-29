@@ -116,10 +116,9 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
 
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date | null; end: Date | null }>({
-    start: null,
-    end: null
-  });
+  const [selectedDateRanges, setSelectedDateRanges] = useState<{
+    [key: number]: { start: Date | null; end: Date | null };
+  }>({});
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   
@@ -154,15 +153,23 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
 
   const handleDateRangeChange = (start: Date | null, end: Date | null) => {
-    setSelectedDateRange({ start, end });
+    if (selectedRoom) {
+      setSelectedDateRanges(prev => ({
+        ...prev,
+        [selectedRoom]: { start, end }
+      }));
+    }
   };
 
   const handleBulkPriceUpdate = async (price: number) => {
-    if (!selectedDateRange.start || !selectedDateRange.end || !selectedRoom) return;
+    if (!selectedRoom || !selectedDateRanges[selectedRoom]?.start) return;
+
+    const { start, end } = selectedDateRanges[selectedRoom];
+    if (!start) return;
 
     const daysToUpdate = eachDayOfInterval({
-      start: selectedDateRange.start,
-      end: selectedDateRange.end || selectedDateRange.start
+      start,
+      end: end || start
     }).map(date => ({
       room_id: selectedRoom,
       date: format(date, 'yyyy-MM-dd'),
@@ -181,11 +188,14 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleBulkAvailabilityUpdate = async (available: boolean) => {
-    if (!selectedDateRange.start || !selectedRoom) return;
+    if (!selectedRoom || !selectedDateRanges[selectedRoom]?.start) return;
+
+    const { start, end } = selectedDateRanges[selectedRoom];
+    if (!start) return;
 
     const daysToUpdate = eachDayOfInterval({
-      start: selectedDateRange.start,
-      end: selectedDateRange.end || selectedDateRange.start
+      start,
+      end: end || start
     }).map(date => ({
       room_id: selectedRoom,
       date: format(date, 'yyyy-MM-dd'),
@@ -199,7 +209,10 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       toast.success('Disponibilità aggiornata con successo');
       const month = format(currentDate, 'yyyy-MM');
       fetchAvailability(month);
-      setSelectedDateRange({ start: null, end: null });
+      setSelectedDateRanges(prev => ({
+        ...prev,
+        [selectedRoom]: { start: null, end: null }
+      }));
     } catch (error) {
       toast.error('Errore durante l\'aggiornamento della disponibilità');
     }
@@ -215,20 +228,26 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   const handleDragStart = (event: any) => {
     const { date, roomId } = event.active.data.current;
     setSelectedRoom(roomId);
-    setSelectedDateRange({ start: date, end: date });
+    setSelectedDateRanges(prev => ({
+      ...prev,
+      [roomId]: { start: date, end: date }
+    }));
     setIsDragging(true);
   };
 
   const handleDragMove = (event: any) => {
-    if (!isDragging || !selectedDateRange.start) return;
+    if (!isDragging || !selectedRoom || !selectedDateRanges[selectedRoom]?.start) return;
     
     const { date } = event.active.data.current;
-    const start = selectedDateRange.start;
+    const start = selectedDateRanges[selectedRoom].start!;
     
-    setSelectedDateRange({
-      start: isBefore(start, date) ? start : date,
-      end: isBefore(start, date) ? date : start
-    });
+    setSelectedDateRanges(prev => ({
+      ...prev,
+      [selectedRoom]: {
+        start: isBefore(start, date) ? start : date,
+        end: isBefore(start, date) ? date : start
+      }
+    }));
   };
 
   const handleDragEnd = () => {
@@ -239,15 +258,26 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     if (isDragging) return;
     
     setSelectedRoom(roomId);
-    if (!selectedDateRange.start) {
-      setSelectedDateRange({ start: day, end: null });
-    } else if (!selectedDateRange.end && !isSameDay(selectedDateRange.start, day)) {
-      setSelectedDateRange(prev => ({
-        start: prev.start,
-        end: day
+    const currentRange = selectedDateRanges[roomId] || { start: null, end: null };
+    
+    if (!currentRange.start) {
+      setSelectedDateRanges(prev => ({
+        ...prev,
+        [roomId]: { start: day, end: null }
+      }));
+    } else if (!currentRange.end && !isSameDay(currentRange.start, day)) {
+      setSelectedDateRanges(prev => ({
+        ...prev,
+        [roomId]: {
+          start: prev[roomId]?.start || null,
+          end: day
+        }
       }));
     } else {
-      setSelectedDateRange({ start: day, end: null });
+      setSelectedDateRanges(prev => ({
+        ...prev,
+        [roomId]: { start: day, end: null }
+      }));
     }
   };
 
@@ -293,13 +323,13 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                 <div className="grid grid-cols-7 gap-1">
                   {days.map(day => {
                     const isAvailable = getAvailabilityStatus(day, room.id);
-                    const isSelected = selectedDateRange.start && 
-                      (selectedDateRange.end 
+                    const isSelected = selectedDateRanges[room.id]?.start && 
+                      (selectedDateRanges[room.id]?.end 
                         ? isWithinInterval(day, {
-                            start: selectedDateRange.start,
-                            end: selectedDateRange.end
+                            start: selectedDateRanges[room.id].start!,
+                            end: selectedDateRanges[room.id].end!
                           })
-                        : isSameDay(day, selectedDateRange.start));
+                        : isSameDay(day, selectedDateRanges[room.id].start!));
                     const dayPrice = availability.find(
                       a => a.room_id === room.id && 
                       isSameDay(new Date(a.date), day)
@@ -358,14 +388,14 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
             Seleziona periodo
           </h3>
           <DateRangePicker
-            startDate={selectedDateRange.start}
-            endDate={selectedDateRange.end}
+            startDate={selectedRoom ? selectedDateRanges[selectedRoom]?.start : null}
+            endDate={selectedRoom ? selectedDateRanges[selectedRoom]?.end : null}
             onDateChange={handleDateRangeChange}
           />
         </div>
 
         <BulkEditPanel
-          selectedDates={selectedDateRange}
+          selectedDates={selectedRoom ? selectedDateRanges[selectedRoom] || { start: null, end: null } : { start: null, end: null }}
           selectedRoom={selectedRoom}
           onUpdatePrice={handleBulkPriceUpdate}
           onUpdateAvailability={handleBulkAvailabilityUpdate}
