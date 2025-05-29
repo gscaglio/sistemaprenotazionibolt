@@ -181,15 +181,24 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     if (isEmergencyActive) return;
     if (!selectedDateRange.start || !currentRoomId) return;
 
-    const daysToUpdate = eachDayOfInterval({
+    const selectedDays = eachDayOfInterval({
       start: selectedDateRange.start,
       end: selectedDateRange.end || selectedDateRange.start
-    }).map(date => ({
-      room_id: currentRoomId,
-      date: format(date, 'yyyy-MM-dd'),
-      price_override: price,
-      available: true
-    }));
+    });
+
+    const daysToUpdate = selectedDays.map(date => {
+      const existingAvailability = availability.find(
+        a => a.room_id === currentRoomId && isSameDay(new Date(a.date), date)
+      );
+
+      return {
+        room_id: currentRoomId,
+        date: format(date, 'yyyy-MM-dd'),
+        price_override: price,
+        available: existingAvailability?.available ?? true,
+        blocked_reason: existingAvailability?.blocked_reason || null
+      };
+    });
 
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
