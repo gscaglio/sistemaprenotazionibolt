@@ -186,43 +186,30 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       end: selectedDateRange.end || selectedDateRange.start
     });
 
-    const existingAvailability = availability.filter(
-      a => a.room_id === currentRoomId && 
-      selectedDays.some(day => isSameDay(new Date(a.date), day))
-    );
-
-    const daysToUpdate = selectedDays.map(date => {
-      const existing = existingAvailability.find(
-        a => isSameDay(new Date(a.date), date)
+    const updates = selectedDays.map(date => {
+      const formattedDate = format(date, 'yyyy-MM-dd');
+      const existingAvailability = availability.find(
+        a => a.room_id === currentRoomId && isSameDay(new Date(a.date), date)
       );
-
-      if (existing && !existing.available) {
-        return {
-          room_id: currentRoomId,
-          date: format(date, 'yyyy-MM-dd'),
-          price_override: existing.price_override,
-          available: false,
-          blocked_reason: existing.blocked_reason,
-          notes: existing.notes
-        };
-      }
 
       return {
         room_id: currentRoomId,
-        date: format(date, 'yyyy-MM-dd'),
+        date: formattedDate,
+        available: existingAvailability ? existingAvailability.available : true,
+        blocked_reason: existingAvailability?.blocked_reason || null,
         price_override: price,
-        available: existing ? existing.available : true,
-        blocked_reason: existing ? existing.blocked_reason : null,
-        notes: existing ? existing.notes : null
+        notes: existingAvailability?.notes || null
       };
     });
 
     try {
-      await availabilityApi.bulkUpdateAvailability(daysToUpdate);
+      await availabilityApi.bulkUpdateAvailability(updates);
       toast.success('Prezzi aggiornati con successo');
       const month = format(currentDate, 'yyyy-MM');
-      fetchAvailability(month);
+      await fetchAvailability(month);
+      setSelectedDateRange({ start: null, end: null });
     } catch (error) {
+      console.error('Error updating prices:', error);
       toast.error('Errore durante l\'aggiornamento dei prezzi');
     }
   };
