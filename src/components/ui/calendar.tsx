@@ -186,17 +186,23 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       end: selectedDateRange.end || selectedDateRange.start
     });
 
+    const existingAvailability = availability.filter(
+      a => a.room_id === currentRoomId && 
+      selectedDays.some(day => isSameDay(new Date(a.date), day))
+    );
+
     const daysToUpdate = selectedDays.map(date => {
-      const existingAvailability = availability.find(
-        a => a.room_id === currentRoomId && isSameDay(new Date(a.date), date)
+      const existing = existingAvailability.find(
+        a => isSameDay(new Date(a.date), date)
       );
 
       return {
         room_id: currentRoomId,
         date: format(date, 'yyyy-MM-dd'),
         price_override: price,
-        available: existingAvailability?.available ?? true,
-        blocked_reason: existingAvailability?.blocked_reason || null
+        available: existing ? existing.available : true,
+        blocked_reason: existing ? existing.blocked_reason : null,
+        notes: existing ? existing.notes : null
       };
     });
 
