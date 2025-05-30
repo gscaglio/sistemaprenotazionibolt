@@ -43,84 +43,69 @@ export const availabilityApi = {
   },
 
   bulkUpdateAvailability: async (updates: Partial<Availability>[]) => {
-    console.log('Starting bulkUpdateAvailability with updates:', {
-      count: updates.length,
-      firstDate: updates[0]?.date,
-      lastDate: updates[updates.length - 1]?.date,
-      roomId: updates[0]?.room_id
+    console.log('Starting bulkUpdateAvailability:', {
+      updateCount: updates.length,
+      firstUpdate: updates[0],
+      lastUpdate: updates[updates.length - 1]
     });
 
     try {
-      // First, delete any existing records for these dates and room
-      if (updates.length > 0) {
-        const roomId = updates[0].room_id;
-        const dates = updates.map(u => u.date);
-        
-        console.log('Attempting to delete existing records:', {
-          roomId,
-          dateCount: dates.length,
-          dateRange: `${dates[0]} to ${dates[dates.length - 1]}`
-        });
+      // First, get existing records for these dates and room
+      const roomId = updates[0]?.room_id;
+      const dates = updates.map(u => u.date);
+      
+      const { data: existingRecords, error: fetchError } = await supabase
+        .from('availability')
+        .select('*')
+        .eq('room_id', roomId)
+        .in('date', dates);
 
-        const { error: deleteError } = await supabase
-          .from('availability')
-          .delete()
-          .eq('room_id', roomId)
-          .in('date', dates);
-          
-        if (deleteError) {
-          console.error('Error deleting existing records:', {
-            error: deleteError,
-            message: deleteError.message,
-            details: deleteError.details,
-            hint: deleteError.hint,
-            code: deleteError.code
-          });
-          throw deleteError;
-        }
-
-        console.log('Successfully deleted existing records');
+      if (fetchError) {
+        console.error('Error fetching existing records:', fetchError);
+        throw fetchError;
       }
 
-      // Then insert the new records
-      console.log('Attempting to insert new records:', {
-        count: updates.length,
-        sample: updates[0]
+      console.log('Existing records found:', existingRecords?.length || 0);
+
+      // Prepare upsert data
+      const upsertData = updates.map(update => ({
+        ...update,
+        updated_at: new Date().toISOString()
+      }));
+
+      console.log('Preparing upsert with data:', {
+        count: upsertData.length,
+        sample: upsertData[0]
       });
 
+      // Perform the upsert
       const { data, error } = await supabase
         .from('availability')
-        .insert(updates)
+        .upsert(upsertData, {
+          onConflict: 'room_id,date',
+          ignoreDuplicates: false
+        })
         .select();
 
       if (error) {
-        console.error('Error inserting new records:', {
+        console.error('Error during upsert:', {
           error,
+          code: error.code,
           message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
+          details: error.details
         });
         throw error;
       }
 
-      console.log('Successfully inserted new records:', {
-        count: data?.length,
+      console.log('Upsert successful:', {
+        updatedCount: data?.length || 0,
         firstRecord: data?.[0],
-        lastRecord: data?.[data.length - 1]
+        lastRecord: data?.[data?.length - 1]
       });
-      
+
       return data;
     } catch (error) {
-      console.error('Unexpected error in bulkUpdateAvailability:', {
-        error,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        updates: {
-          count: updates.length,
-          firstDate: updates[0]?.date,
-          lastDate: updates[updates.length - 1]?.date
-        }
-      });
+      console.error('Unexpected error in bulkUpdateAvailability:', error);
       throw error;
     }
   }
