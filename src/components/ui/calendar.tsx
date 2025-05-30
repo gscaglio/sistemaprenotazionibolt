@@ -5,7 +5,6 @@ import { it } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
-import { availabilityApi } from '../../lib/api/availability';
 import { priceSchema, dateRangeSchema } from '../../lib/validations';
 import toast from 'react-hot-toast';
 
@@ -222,6 +221,14 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleDateClick = (day: Date, roomId: number) => {
+    console.log('handleDateClick - Before:', { 
+      day: format(day, 'yyyy-MM-dd'),
+      currentRange: {
+        start: selectedDateRange.start ? format(selectedDateRange.start, 'yyyy-MM-dd') : null,
+        end: selectedDateRange.end ? format(selectedDateRange.end, 'yyyy-MM-dd') : null
+      }
+    });
+
     if (roomId !== currentRoomId || isAfter(day, MAX_DATE)) return;
     
     if (!selectedDateRange.start) {
@@ -241,10 +248,26 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     } else {
       setSelectedDateRange({ start: day, end: null });
     }
+
+    console.log('handleDateClick - After:', {
+      day: format(day, 'yyyy-MM-dd'),
+      newRange: {
+        start: selectedDateRange.start ? format(selectedDateRange.start, 'yyyy-MM-dd') : null,
+        end: selectedDateRange.end ? format(selectedDateRange.end, 'yyyy-MM-dd') : null
+      }
+    });
   };
 
   const handleMouseEnter = (day: Date) => {
     if (isDragging && selectedDateRange.start && !isSameDay(selectedDateRange.start, day) && !isAfter(day, MAX_DATE)) {
+      console.log('handleMouseEnter:', {
+        day: format(day, 'yyyy-MM-dd'),
+        currentRange: {
+          start: selectedDateRange.start ? format(selectedDateRange.start, 'yyyy-MM-dd') : null,
+          end: selectedDateRange.end ? format(selectedDateRange.end, 'yyyy-MM-dd') : null
+        }
+      });
+
       setSelectedDateRange(prev => ({
         start: prev.start,
         end: day
@@ -264,6 +287,14 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       price_override: price,
       available: true
     }));
+
+    console.log('handleBulkPriceUpdate:', {
+      selectedRange: {
+        start: format(selectedDateRange.start, 'yyyy-MM-dd'),
+        end: format(selectedDateRange.end, 'yyyy-MM-dd')
+      },
+      daysToUpdate: daysToUpdate.map(d => d.date)
+    });
 
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
@@ -291,6 +322,15 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       blocked_reason: available ? null : 'manual_block',
       price_override: available ? getDefaultPrice(currentRoomId) : null
     }));
+
+    console.log('handleBulkAvailabilityUpdate:', {
+      selectedRange: {
+        start: format(selectedDateRange.start, 'yyyy-MM-dd'),
+        end: endDate ? format(endDate, 'yyyy-MM-dd') : null
+      },
+      daysToUpdate: daysToUpdate.map(d => d.date),
+      available
+    });
 
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
