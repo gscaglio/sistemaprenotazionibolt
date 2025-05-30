@@ -1,8 +1,10 @@
 import { create } from 'zustand';
-import { supabase } from '../lib/supabase'; // Direct Supabase client, possibly for other methods
+// supabase import removed as it's no longer directly used in this file.
+// import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
-import { endOfMonth, parse, format } from 'date-fns';
-import { availabilityApi } from '../lib/api/availability'; // Import the API
+// endOfMonth, parse, format from date-fns removed as they are no longer directly used in this file.
+// import { endOfMonth, parse, format } from 'date-fns';
+import { availabilityApi } from '../lib/api/availability';
 
 type Availability = Database['public']['Tables']['availability']['Row'];
 type AvailabilityUpdate = Partial<Availability>;
@@ -30,30 +32,19 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
   loading: false,
   error: null,
   fetchAvailability: async (month) => {
-    console.log(`[Store] Fetching availability for month: ${month}`);
+    console.log(`[Store] Fetching availability for month: ${month} using API`);
     set({ loading: true, error: null });
     try {
-      // Using availabilityApi.getAvailability for consistency, though it was not part of the original request to change
-      // For now, let's assume direct supabase call is fine here as per original code.
-      const startDate = `${month}-01`;
-      const parsedDate = parse(month, 'yyyy-MM', new Date());
-      const endDate = format(endOfMonth(parsedDate), 'yyyy-MM-dd');
+      const data = await availabilityApi.getAvailability(month); // Use the API
       
-      const { data, error } = await supabase // Direct Supabase call
-        .from('availability')
-        .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date');
-      
-      if (error) {
-        console.error(`[Store] Error fetching availability for month ${month}:`, error);
-        throw error;
-      }
-      console.log(`[Store] Successfully fetched ${data?.length || 0} records for month ${month}.`);
+      // The API throws an error on failure, so no need to check for 'error' object here.
+      // The 'data' will be the array of availability records.
+      console.log(`[Store] Successfully fetched ${data?.length || 0} records for month ${month} via API.`);
+      // The API's getAvailability returns data directly, ensure it matches structure.
+      // Assuming data is Availability[] or null/undefined if error (though it throws).
       set({ availability: data || [], loading: false });
     } catch (error) {
-      console.error(`[Store] Catch: Error fetching availability for month ${month}:`, error);
+      console.error(`[Store] Catch: Error fetching availability for month ${month} via API:`, error);
       set({ error: (error as Error).message, loading: false });
     }
   },
