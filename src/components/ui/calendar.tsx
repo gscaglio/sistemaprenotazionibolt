@@ -192,8 +192,10 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
       toast.success('Prezzi aggiornati con successo');
-      visibleMonths.forEach(month => {
-        fetchAvailability(format(month, 'yyyy-MM'));
+      // Refresh availability data for affected months
+      const uniqueMonths = new Set(daysToUpdate.map(day => day.date.substring(0, 7)));
+      uniqueMonths.forEach(month => {
+        fetchAvailability(month);
       });
     } catch (error) {
       toast.error('Errore durante l\'aggiornamento dei prezzi');
@@ -217,8 +219,10 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
       toast.success('Disponibilità aggiornata con successo');
-      visibleMonths.forEach(month => {
-        fetchAvailability(format(month, 'yyyy-MM'));
+      // Refresh availability data for affected months
+      const uniqueMonths = new Set(daysToUpdate.map(day => day.date.substring(0, 7)));
+      uniqueMonths.forEach(month => {
+        fetchAvailability(month);
       });
       setSelectedDateRange({ start: null, end: null });
     } catch (error) {
