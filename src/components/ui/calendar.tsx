@@ -248,13 +248,14 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   }, [storeError]);
 
   useEffect(() => {
-    // Initialize with current month and next 2 months
-    const initialMonths = [new Date()];
-    for (let i = 1; i <= 2; i++) {
-      initialMonths.push(addMonths(new Date(), i));
+    // Initialize with current month and next 15 months (total 16 months)
+    const initialMonths = [];
+    const today = new Date();
+    for (let i = 0; i < MAX_MONTHS; i++) { // MAX_MONTHS is already defined as 16
+      initialMonths.push(addMonths(today, i));
     }
     setVisibleMonths(initialMonths);
-  }, []);
+  }, []); // Keep the dependency array empty to run only on mount
 
   useEffect(() => {
     // Fetch availability for all visible months
