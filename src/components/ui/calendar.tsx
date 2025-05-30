@@ -159,7 +159,6 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     start: null,
     end: null
   });
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   
   const { rooms } = useRoomStore();
