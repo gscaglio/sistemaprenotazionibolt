@@ -7,6 +7,7 @@ import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { availabilityApi } from '../../lib/api/availability';
+import { priceSchema, dateRangeSchema } from '../../lib/validations';
 import toast from 'react-hot-toast';
 
 interface CalendarProps {
@@ -31,6 +32,24 @@ interface BulkEditPanelProps {
 }
 
 function DateRangePicker({ startDate, endDate, onDateChange }: DateRangePickerProps) {
+  const [error, setError] = useState('');
+
+  const handleDateChange = (start: Date | null, end: Date | null) => {
+    setError('');
+    if (start && end) {
+      try {
+        dateRangeSchema.parse({ startDate: start, endDate: end });
+        onDateChange(start, end);
+      } catch (err) {
+        if (err instanceof Error) {
+          setError(err.message);
+        }
+      }
+    } else {
+      onDateChange(start, end);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -38,7 +57,7 @@ function DateRangePicker({ startDate, endDate, onDateChange }: DateRangePickerPr
         <input
           type="date"
           value={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
-          onChange={(e) => onDateChange(e.target.value ? new Date(e.target.value) : null, endDate)}
+          onChange={(e) => handleDateChange(e.target.value ? new Date(e.target.value) : null, endDate)}
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
         />
       </div>
@@ -47,18 +66,35 @@ function DateRangePicker({ startDate, endDate, onDateChange }: DateRangePickerPr
         <input
           type="date"
           value={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
-          onChange={(e) => onDateChange(startDate, e.target.value ? new Date(e.target.value) : null)}
+          onChange={(e) => handleDateChange(startDate, e.target.value ? new Date(e.target.value) : null)}
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
         />
       </div>
+      {error && (
+        <p className="text-sm text-red-600">{error}</p>
+      )}
     </div>
   );
 }
 
 function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAvailability }: BulkEditPanelProps) {
   const [price, setPrice] = useState<string>('');
+  const [error, setError] = useState('');
 
   if (!selectedDates.start || !selectedRoom) return null;
+
+  const handlePriceUpdate = () => {
+    setError('');
+    try {
+      const numericPrice = Number(price);
+      priceSchema.parse({ price: numericPrice });
+      onUpdatePrice(numericPrice);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      }
+    }
+  };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
@@ -83,8 +119,11 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
               placeholder="0.00"
             />
           </div>
+          {error && (
+            <p className="mt-2 text-sm text-red-600">{error}</p>
+          )}
           <button
-            onClick={() => onUpdatePrice(Number(price))}
+            onClick={handlePriceUpdate}
             className="mt-2 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             Aggiorna prezzo
