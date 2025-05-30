@@ -37,11 +37,11 @@ export const availabilityApi = {
       throw new Error('Il prezzo non può essere negativo');
     }
 
-    // Ensure blocked_reason is set when closing dates
+    // Only set blocked_reason when explicitly closing dates
     const processedUpdates = {
       ...updates,
       blocked_reason: updates.available === false ? 'manual_block' : null,
-      // Clear price override when closing dates
+      // Keep existing price_override unless explicitly closing
       price_override: updates.available === false ? null : updates.price_override
     };
 
@@ -64,7 +64,7 @@ export const availabilityApi = {
       }
     });
 
-    // Process updates to ensure consistency
+    // Process updates to maintain data consistency
     const processedUpdates = updates.map(update => ({
       ...update,
       blocked_reason: update.available === false ? 'manual_block' : null,
@@ -83,6 +83,7 @@ export const availabilityApi = {
     return data;
   },
 
+  // New method to reset availability for specific dates
   resetAvailability: async (roomId: number, dates: string[]) => {
     const { error } = await supabase
       .from('availability')
