@@ -43,7 +43,12 @@ export const availabilityApi = {
   },
 
   bulkUpdateAvailability: async (updates: Partial<Availability>[]) => {
-    console.log('Starting bulkUpdateAvailability with updates:', updates);
+    console.log('Starting bulkUpdateAvailability with updates:', {
+      count: updates.length,
+      firstDate: updates[0]?.date,
+      lastDate: updates[updates.length - 1]?.date,
+      roomId: updates[0]?.room_id
+    });
 
     try {
       // First, delete any existing records for these dates and room
@@ -51,9 +56,10 @@ export const availabilityApi = {
         const roomId = updates[0].room_id;
         const dates = updates.map(u => u.date);
         
-        console.log('Deleting existing records for:', {
+        console.log('Attempting to delete existing records:', {
           roomId,
-          dates,
+          dateCount: dates.length,
+          dateRange: `${dates[0]} to ${dates[dates.length - 1]}`
         });
 
         const { error: deleteError } = await supabase
@@ -63,7 +69,13 @@ export const availabilityApi = {
           .in('date', dates);
           
         if (deleteError) {
-          console.error('Error deleting existing records:', deleteError);
+          console.error('Error deleting existing records:', {
+            error: deleteError,
+            message: deleteError.message,
+            details: deleteError.details,
+            hint: deleteError.hint,
+            code: deleteError.code
+          });
           throw deleteError;
         }
 
@@ -71,7 +83,10 @@ export const availabilityApi = {
       }
 
       // Then insert the new records
-      console.log('Inserting new records:', updates);
+      console.log('Attempting to insert new records:', {
+        count: updates.length,
+        sample: updates[0]
+      });
 
       const { data, error } = await supabase
         .from('availability')
@@ -81,18 +96,31 @@ export const availabilityApi = {
       if (error) {
         console.error('Error inserting new records:', {
           error,
-          errorMessage: error.message,
-          errorDetails: error.details,
+          message: error.message,
+          details: error.details,
           hint: error.hint,
           code: error.code
         });
         throw error;
       }
 
-      console.log('Successfully inserted new records:', data);
+      console.log('Successfully inserted new records:', {
+        count: data?.length,
+        firstRecord: data?.[0],
+        lastRecord: data?.[data.length - 1]
+      });
+      
       return data;
     } catch (error) {
-      console.error('Unexpected error in bulkUpdateAvailability:', error);
+      console.error('Unexpected error in bulkUpdateAvailability:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        updates: {
+          count: updates.length,
+          firstDate: updates[0]?.date,
+          lastDate: updates[updates.length - 1]?.date
+        }
+      });
       throw error;
     }
   }
