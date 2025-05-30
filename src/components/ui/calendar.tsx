@@ -5,8 +5,14 @@ import { it } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
-import { priceSchema, dateRangeSchema } from '../../lib/validations';
+import { priceSchema } from '../../lib/validations';
 import toast from 'react-hot-toast';
+import { DateRangePicker } from './DateRangePicker';
+import { BulkEditPanel } from './BulkEditPanel';
+import type { Database } from '../../lib/database.types';
+
+// Define RoomType alias
+type RoomType = Database['public']['Tables']['rooms']['Row'];
 
 interface CalendarProps {
   mode?: 'single' | 'range' | 'admin';
@@ -16,208 +22,15 @@ interface CalendarProps {
   currentRoomId?: number;
 }
 
-interface DateRangePickerProps {
-  startDate: Date | null;
-  endDate: Date | null;
-  onDateChange: (start: Date | null, end: Date | null) => void;
-}
-
-interface BulkEditPanelProps {
-  selectedDates: { start: Date | null; end: Date | null };
-  selectedRoom: number | null;
-  onUpdatePrice: (price: number) => void;
-  onUpdateAvailability: (available: boolean) => void;
-  onRevertToBasePrice: () => void;
-  // New props for displaying info in the panel
-  currentPriceDisplay?: string | number; 
-  // currentAvailabilityDisplay?: string; // Maybe later if needed
-}
+// DateRangePickerProps moved to DateRangePicker.tsx
+// BulkEditPanelProps moved to BulkEditPanel.tsx
 
 const MAX_MONTHS = 16;
 const MAX_DATE = addMonths(new Date(), MAX_MONTHS);
 
-function DateRangePicker({ startDate, endDate, onDateChange }: DateRangePickerProps) {
-  const [error, setError] = useState('');
+// DateRangePicker function moved to DateRangePicker.tsx
 
-  const handleDateChange = (start: Date | null, end: Date | null) => {
-    setError('');
-    if (start && isAfter(start, MAX_DATE)) {
-      setError(`Non puoi selezionare date oltre ${format(MAX_DATE, 'dd/MM/yyyy')}`);
-      return;
-    }
-    if (end && isAfter(end, MAX_DATE)) {
-      setError(`Non puoi selezionare date oltre ${format(MAX_DATE, 'dd/MM/yyyy')}`);
-      return;
-    }
-    if (start && end) {
-      try {
-        dateRangeSchema.parse({ startDate: start, endDate: end });
-        onDateChange(start, end);
-      } catch (err) {
-        if (err instanceof Error) {
-          setError(err.message);
-        }
-      }
-    } else {
-      onDateChange(start, end);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700">Dal</label>
-        <input
-          type="date"
-          value={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
-          onChange={(e) => handleDateChange(e.target.value ? new Date(e.target.value) : null, endDate)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          max={format(MAX_DATE, 'yyyy-MM-dd')}
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">Al</label>
-        <input
-          type="date"
-          value={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
-          onChange={(e) => handleDateChange(startDate, e.target.value ? new Date(e.target.value) : null)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          max={format(MAX_DATE, 'yyyy-MM-dd')}
-        />
-      </div>
-      {error && (
-        <p className="text-sm text-red-600">{error}</p>
-      )}
-    </div>
-  );
-}
-
-function BulkEditPanel({ 
-  selectedDates, 
-  selectedRoom, 
-  onUpdatePrice, 
-  onUpdateAvailability,
-  onRevertToBasePrice,
-  isUpdating,
-  currentPriceDisplay // Consuming the new prop
-}: BulkEditPanelProps & { isUpdating?: boolean }) {
-  const [price, setPrice] = useState<string>('');
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    // If currentPriceDisplay is a number, it means a common price is set.
-    // If it's a string (like "Mixed" or "Base"), user should type a new price.
-    // Or, if it's the actual base price, user might want to see it.
-    // For now, let's not auto-fill the input to allow easy override.
-    // The placeholder will show the information.
-    setPrice(''); // Clear input when selection changes or info updates
-  }, [currentPriceDisplay, selectedDates]);
-
-
-  if (!selectedDates.start || !selectedRoom) return null;
-
-  const handlePriceUpdate = () => {
-    if (isUpdating) return;
-    setError('');
-    try {
-      const numericPrice = Number(price);
-      priceSchema.parse({ price: numericPrice });
-      onUpdatePrice(numericPrice);
-      setPrice('');
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      }
-    }
-  };
-
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900">
-        Modifica date selezionate
-      </h3>
-      
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Prezzo per notte
-          </label>
-          <div className="mt-1 relative rounded-md shadow-sm">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="text-gray-500 sm:text-sm">€</span>
-            </div>
-            <input
-              type="number"
-              value={price} // User's input for new price
-              onChange={(e) => setPrice(e.target.value)}
-              className="pl-7 block w-full rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-              placeholder={
-                currentPriceDisplay !== undefined && currentPriceDisplay !== '' 
-                  ? String(currentPriceDisplay) 
-                  : "0.00"
-              }
-            />
-          </div>
-          {error && (
-            <p className="mt-2 text-sm text-red-600">{error}</p>
-          )}
-          <button
-            onClick={handlePriceUpdate}
-            disabled={isUpdating}
-            className={cn(
-              "mt-4 w-full h-11 inline-flex justify-center items-center px-4 border border-transparent text-base font-medium rounded-md text-white",
-              isUpdating ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            )}
-          >
-            {isUpdating ? 'Aggiornamento...' : 'Aggiorna prezzo'}
-          </button>
-          <button
-            onClick={() => {
-              if (isUpdating) return;
-              onRevertToBasePrice();
-            }}
-            disabled={isUpdating}
-            className={cn(
-              "mt-2 w-full h-11 inline-flex justify-center items-center px-4 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50",
-              isUpdating ? "opacity-50 cursor-not-allowed" : ""
-            )}
-            title="Imposta il prezzo override a NULL, usando il prezzo base della stanza."
-          >
-            {isUpdating ? '...' : 'Reverti a Prezzo Base'}
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">
-            Disponibilità
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => onUpdateAvailability(true)}
-              disabled={isUpdating}
-              className={cn(
-                "h-11 inline-flex justify-center items-center px-4 border border-transparent text-base font-medium rounded-md text-white",
-                isUpdating ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
-              )}
-            >
-              {isUpdating ? '...' : 'Apri'}
-            </button>
-            <button
-              onClick={() => onUpdateAvailability(false)}
-              disabled={isUpdating}
-              className={cn(
-                "h-11 inline-flex justify-center items-center px-4 border border-transparent text-base font-medium rounded-md text-white",
-                isUpdating ? "bg-gray-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
-              )}
-            >
-              {isUpdating ? '...' : 'Chiudi'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+// BulkEditPanel function moved to BulkEditPanel.tsx
 
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className, currentRoomId }: CalendarProps) {
   const [visibleMonths, setVisibleMonths] = useState<Date[]>([new Date()]);
@@ -284,7 +97,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
         return [...prev.slice(1), nextMonth];
       }
     });
-  }, []);
+  }, []); // MAX_DATE is used here
 
   const getDefaultPrice = (roomId: number) => {
     const room = rooms.find(r => r.id === roomId);
@@ -337,7 +150,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     //   }
     // });
 
-    if (roomId !== currentRoomId || isAfter(day, MAX_DATE)) return;
+    if (roomId !== currentRoomId || isAfter(day, MAX_DATE)) return; // MAX_DATE is used here
     
     if (!selectedDateRange.start) {
       setSelectedDateRange({ start: day, end: null });
@@ -466,7 +279,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
 
 
   const handleMouseEnter = (day: Date) => {
-    if (isDragging && selectedDateRange.start && !isAfter(day, MAX_DATE)) {
+    if (isDragging && selectedDateRange.start && !isAfter(day, MAX_DATE)) { // MAX_DATE is used here
       // Allow mouse enter to update the end date even if it's the same as start,
       // as the user might drag out and back in. The final sorting of start/end will be handled on mouse up.
       // console.log('Calendar: handleMouseEnter - Updating potential end date.', { 
@@ -644,7 +457,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
    * Renders a single month view for a given room.
    * Includes month navigation and the grid of days with their respective styles and prices.
    */
-  const renderMonth = (month: Date, room: any) => {
+  const renderMonth = (month: Date, room: RoomType) => {
     if (currentRoomId && room.id !== currentRoomId) return null;
 
     const monthStart = startOfMonth(month);
@@ -662,13 +475,15 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
               onClick={() => handleScroll('prev')}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               disabled={isBefore(subMonths(month, 1), new Date())}
+              aria-label="Mese precedente" // Added ARIA label
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
             <button
               onClick={() => handleScroll('next')}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              disabled={isAfter(addMonths(month, 1), MAX_DATE)}
+              disabled={isAfter(addMonths(month, 1), MAX_DATE)} // MAX_DATE is used here
+              aria-label="Mese successivo" // Added ARIA label
             >
               <ChevronRight className="h-5 w-5" />
             </button>
@@ -697,7 +512,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
             
             const isCurrentDay = isToday(day);
             const isNextDay = isTomorrow(day);
-            const isFutureDate = isAfter(day, MAX_DATE);
+            const isFutureDate = isAfter(day, MAX_DATE); // MAX_DATE is used here
 
             let dayStyle = 'bg-gray-100 cursor-not-allowed opacity-50';
 
