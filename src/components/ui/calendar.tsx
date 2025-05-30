@@ -280,9 +280,10 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   const handleBulkAvailabilityUpdate = async (available: boolean) => {
     if (!selectedDateRange.start || !currentRoomId) return;
 
+    const endDate = selectedDateRange.end || selectedDateRange.start;
     const daysToUpdate = eachDayOfInterval({
       start: selectedDateRange.start,
-      end: selectedDateRange.end || selectedDateRange.start
+      end: endDate
     }).map(date => ({
       room_id: currentRoomId,
       date: format(date, 'yyyy-MM-dd'),
