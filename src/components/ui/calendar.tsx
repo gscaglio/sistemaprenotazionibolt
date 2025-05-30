@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore } from 'date-fns';
+import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore, addDays } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -154,51 +154,46 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
 }
 
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className, currentRoomId }: CalendarProps) {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [visibleMonths, setVisibleMonths] = useState<Date[]>([new Date()]);
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date | null; end: Date | null }>({
     start: null,
     end: null
   });
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
   
   const { rooms } = useRoomStore();
   const { availability, fetchAvailability } = useAvailabilityStore();
 
   useEffect(() => {
-    const startOfCurrentMonth = startOfMonth(currentDate);
-    const endOfCurrentMonth = endOfMonth(currentDate);
-    
-    const months = new Set([
-      format(startOfCurrentMonth, 'yyyy-MM'),
-      format(endOfCurrentMonth, 'yyyy-MM')
-    ]);
-    
+    // Initialize with current month and next 2 months
+    const initialMonths = [new Date()];
+    for (let i = 1; i <= 2; i++) {
+      initialMonths.push(addMonths(new Date(), i));
+    }
+    setVisibleMonths(initialMonths);
+  }, []);
+
+  useEffect(() => {
+    // Fetch availability for all visible months
+    const months = new Set(visibleMonths.map(date => format(date, 'yyyy-MM')));
     months.forEach(month => {
       fetchAvailability(month);
     });
-  }, [currentDate, fetchAvailability]);
+  }, [visibleMonths, fetchAvailability]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.touches[0].clientX);
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX === null) return;
+  const handleScroll = () => {
+    if (!calendarRef.current) return;
     
-    const touchEndX = e.changedTouches[0].clientX;
-    const diff = touchEndX - touchStartX;
+    const { scrollTop, scrollHeight, clientHeight } = calendarRef.current;
+    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
     
-    if (Math.abs(diff) > 50) { // Minimum swipe distance
-      if (diff > 0) {
-        // Swipe right - previous month
-        setCurrentDate(prev => subMonths(prev, 1));
-      } else {
-        // Swipe left - next month
-        setCurrentDate(prev => addMonths(prev, 1));
-      }
+    if (scrollPercentage > 0.8) {
+      // Add next month when scrolling near bottom
+      const lastMonth = visibleMonths[visibleMonths.length - 1];
+      const nextMonth = addMonths(lastMonth, 1);
+      setVisibleMonths(prev => [...prev, nextMonth]);
     }
-    
-    setTouchStartX(null);
   };
 
   const getDefaultPrice = (roomId: number) => {
@@ -287,19 +282,18 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     return dayAvailability?.price_override || getDefaultPrice(roomId);
   };
 
-  const renderMonthView = (room: any) => {
+  const renderMonth = (month: Date, room: any) => {
     if (currentRoomId && room.id !== currentRoomId) return null;
 
-    const startOfCurrentMonth = startOfMonth(currentDate);
-    const endOfCurrentMonth = endOfMonth(currentDate);
-    const days = eachDayOfInterval({ start: startOfCurrentMonth, end: endOfCurrentMonth });
+    const monthStart = startOfMonth(month);
+    const monthEnd = endOfMonth(month);
+    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
     return (
-      <div 
-        className="touch-pan-x"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
+      <div key={format(month, 'yyyy-MM')} className="mb-8">
+        <h3 className="text-lg font-semibold mb-4 text-gray-900">
+          {format(month, 'MMMM yyyy', { locale: it })}
+        </h3>
         <div className="grid grid-cols-7 gap-1 mb-4">
           {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((day) => (
             <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
@@ -308,7 +302,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
           ))}
         </div>
         <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: startOfCurrentMonth.getDay() - 1 }).map((_, index) => (
+          {Array.from({ length: monthStart.getDay() - 1 }).map((_, index) => (
             <div key={`empty-${index}`} className="min-h-[60px]" />
           ))}
           {days.map(day => {
@@ -361,34 +355,23 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
       <div className="md:col-span-2">
-        <div className={cn('bg-white rounded-lg shadow-lg p-4 md:p-6', className)}>
-          <div className="flex items-center justify-between mb-6">
-            <button
-              onClick={() => setCurrentDate(prev => subMonths(prev, 1))}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </button>
-            <h3 className="text-lg font-medium">
-              {format(currentDate, 'MMMM yyyy', { locale: it })}
-            </h3>
-            <button
-              onClick={() => setCurrentDate(prev => addMonths(prev, 1))}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <ChevronRight className="h-6 w-6" />
-            </button>
-          </div>
-
+        <div 
+          ref={calendarRef}
+          onScroll={handleScroll}
+          className={cn(
+            'bg-white rounded-lg shadow-lg p-4 md:p-6 max-h-[800px] overflow-y-auto',
+            className
+          )}
+        >
           {rooms.map(room => (
-            <div key={room.id} className="mb-8">
-              {renderMonthView(room)}
+            <div key={room.id}>
+              {visibleMonths.map(month => renderMonth(month, room))}
             </div>
           ))}
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-6 md:sticky md:top-4">
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <h3 className="text-lg font-semibold mb-4 text-gray-900">
             Seleziona periodo
