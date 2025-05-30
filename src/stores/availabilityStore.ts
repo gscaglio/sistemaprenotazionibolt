@@ -1,10 +1,7 @@
 import { create } from 'zustand';
-// supabase import removed as it's no longer directly used in this file.
-// import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
-// endOfMonth, parse, format from date-fns removed as they are no longer directly used in this file.
-// import { endOfMonth, parse, format } from 'date-fns';
 import { availabilityApi } from '../lib/api/availability';
+import { startOfMonth, endOfMonth, parse, format } from 'date-fns';
 
 type Availability = Database['public']['Tables']['availability']['Row'];
 type AvailabilityUpdate = Partial<Availability>;
@@ -32,19 +29,38 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
   loading: false,
   error: null,
   fetchAvailability: async (month) => {
-    console.log(`[Store] Fetching availability for month: ${month} using API`);
-    set({ loading: true, error: null });
+    console.log(`[Store] Fetching availability for month: ${month}`);
+    set(state => ({ loading: true, error: null }));
+    
     try {
-      const data = await availabilityApi.getAvailability(month); // Use the API
+      const data = await availabilityApi.getAvailability(month);
       
-      // The API throws an error on failure, so no need to check for 'error' object here.
-      // The 'data' will be the array of availability records.
-      console.log(`[Store] Successfully fetched ${data?.length || 0} records for month ${month} via API.`);
-      // The API's getAvailability returns data directly, ensure it matches structure.
-      // Assuming data is Availability[] or null/undefined if error (though it throws).
-      set({ availability: data || [], loading: false });
+      // Get the date range for the month being fetched
+      const monthStart = format(startOfMonth(parse(month, 'yyyy-MM', new Date())), 'yyyy-MM-dd');
+      const monthEnd = format(endOfMonth(parse(month, 'yyyy-MM', new Date())), 'yyyy-MM-dd');
+      
+      set(state => {
+        // Remove existing data for this month
+        const filteredAvailability = state.availability.filter(item => {
+          const itemDate = item.date;
+          return itemDate < monthStart || itemDate > monthEnd;
+        });
+        
+        // Merge new data with existing data from other months
+        const newAvailability = [...filteredAvailability, ...(data || [])];
+        
+        console.log(`[Store] Successfully merged availability data. Total records: ${newAvailability.length}`);
+        console.log(`[Store] Records for current month: ${data?.length || 0}`);
+        console.log(`[Store] Records for other months: ${filteredAvailability.length}`);
+        
+        return {
+          availability: newAvailability,
+          loading: false,
+          error: null
+        };
+      });
     } catch (error) {
-      console.error(`[Store] Catch: Error fetching availability for month ${month} via API:`, error);
+      console.error(`[Store] Error fetching availability for month ${month}:`, error);
       set({ error: (error as Error).message, loading: false });
     }
   },
@@ -52,10 +68,9 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
     console.log(`[Store] Updating availability for id: ${id} with updates:`, updates);
     set({ loading: true, error: null });
     try {
-      // Using availabilityApi.updateAvailability for consistency
       const data = await availabilityApi.updateAvailability(id, updates);
       
-      console.log(`[Store] Successfully updated availability for id: ${id}.`);
+      console.log(`[Store] Successfully updated availability for id: ${id}`);
       set((state) => ({
         availability: state.availability.map((item) =>
           item.id === id ? { ...item, ...data } : item
@@ -82,7 +97,6 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
       if (!returnedData) {
         console.warn('[Store] API call for bulk update returned undefined data. No store update will be performed.');
         set({ loading: false });
-        // Potentially set an error state here if this is unexpected
         return;
       }
       
@@ -110,11 +124,10 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
           } else {
             // Add new item
             console.log(`[Store] Merging: Adding new item for date ${newItem.date}, room ${newItem.room_id}.`);
-            newAvailability.push(newItem as Availability); // Cast to Availability as API returns full object
+            newAvailability.push(newItem as Availability);
           }
         });
         
-        // For debugging: log a sample of the new availability state
         console.log('[Store] Merging complete. New availability sample:', logSample(newAvailability));
         console.log('[Store] Total items in availability after merge:', newAvailability.length);
 
