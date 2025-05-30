@@ -34,19 +34,24 @@ export const availabilityApi = {
   updateAvailability: async (id: number, updates: Partial<Availability>) => {
     // Validate updates before applying
     if (updates.price_override !== undefined && updates.price_override < 0) {
-      throw new Error('Price cannot be negative');
+      throw new Error('Il prezzo non può essere negativo');
     }
+
+    // Ensure blocked_reason is set when closing dates
+    const processedUpdates = {
+      ...updates,
+      blocked_reason: updates.available === false ? 'manual_block' : null,
+      // Clear price override when closing dates
+      price_override: updates.available === false ? null : updates.price_override
+    };
 
     const { data, error } = await supabase
       .from('availability')
-      .update({
-        ...updates,
-        // Ensure availability is explicitly set when updating price
-        available: updates.price_override !== undefined ? true : updates.available
-      })
+      .update(processedUpdates)
       .eq('id', id)
       .select()
       .single();
+    
     if (error) throw error;
     return data;
   },
@@ -55,14 +60,15 @@ export const availabilityApi = {
     // Validate all updates before processing
     updates.forEach(update => {
       if (update.price_override !== undefined && update.price_override < 0) {
-        throw new Error('Price cannot be negative');
+        throw new Error('Il prezzo non può essere negativo');
       }
     });
 
+    // Process updates to ensure consistency
     const processedUpdates = updates.map(update => ({
       ...update,
-      // Ensure availability is true when setting price
-      available: update.price_override !== undefined ? true : update.available
+      blocked_reason: update.available === false ? 'manual_block' : null,
+      price_override: update.available === false ? null : update.price_override
     }));
 
     const { data, error } = await supabase
