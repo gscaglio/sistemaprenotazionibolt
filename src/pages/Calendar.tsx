@@ -80,7 +80,7 @@ function CalendarPage() {
           </h1>
         </div>
       </div>
-      <Calendar mode="admin" currentRoomId={currentRoom.id} />
+      <Calendar mode="admin" currentRoomId={Number(roomId)} />
     </div>
   );
 }
