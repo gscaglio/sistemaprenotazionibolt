@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isWithinInterval, isBefore, subMonths } from 'date-fns';
+import { addDays, addWeeks, subWeeks, format, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useState, useEffect, useRef } from 'react';
 import { DndContext, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -124,7 +124,7 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
           )}
           <button
             onClick={handlePriceUpdate}
-            className="mt-2 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="mt-4 w-full h-11 inline-flex justify-center items-center px-4 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             Aggiorna prezzo
           </button>
@@ -137,13 +137,13 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => onUpdateAvailability(true)}
-              className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+              className="h-11 inline-flex justify-center items-center px-4 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
             >
               Apri
             </button>
             <button
               onClick={() => onUpdateAvailability(false)}
-              className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+              className="h-11 inline-flex justify-center items-center px-4 border border-transparent text-base font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
             >
               Chiudi
             </button>
@@ -155,13 +155,14 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
 }
 
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className, currentRoomId }: CalendarProps) {
-  const [visibleMonths, setVisibleMonths] = useState<Date[]>([]);
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date | null; end: Date | null }>({
     start: null,
     end: null
   });
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
   
   const { rooms } = useRoomStore();
   const { availability, fetchAvailability } = useAvailabilityStore();
@@ -175,35 +176,41 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   const sensors = useSensors(mouseSensor);
 
   useEffect(() => {
-    // Initialize with 12 months starting from current month
-    const initialMonths = Array.from({ length: 12 }, (_, i) => 
-      addMonths(startOfMonth(new Date()), i)
-    );
-    setVisibleMonths(initialMonths);
-  }, []);
-
-  useEffect(() => {
-    // Fetch availability data for visible months
-    visibleMonths.forEach(month => {
-      fetchAvailability(format(month, 'yyyy-MM'));
+    // Fetch availability for current week and next week
+    const startOfCurrentWeek = startOfWeek(currentDate, { weekStartsOn: 1 });
+    const endOfNextWeek = endOfWeek(addWeeks(currentDate, 1), { weekStartsOn: 1 });
+    
+    const months = new Set([
+      format(startOfCurrentWeek, 'yyyy-MM'),
+      format(endOfNextWeek, 'yyyy-MM')
+    ]);
+    
+    months.forEach(month => {
+      fetchAvailability(month);
     });
-  }, [visibleMonths, fetchAvailability]);
+  }, [currentDate, fetchAvailability]);
 
-  const handleScroll = () => {
-    if (!containerRef.current) return;
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
 
-    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    const scrolledToBottom = scrollHeight - scrollTop <= clientHeight + 100;
-
-    if (scrolledToBottom) {
-      // Add 6 more months when reaching bottom
-      setVisibleMonths(prev => [
-        ...prev,
-        ...Array.from({ length: 6 }, (_, i) => 
-          addMonths(prev[prev.length - 1], i + 1)
-        )
-      ]);
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchEndX - touchStartX;
+    
+    if (Math.abs(diff) > 50) { // Minimum swipe distance
+      if (diff > 0) {
+        // Swipe right - previous week
+        setCurrentDate(prev => subWeeks(prev, 1));
+      } else {
+        // Swipe left - next week
+        setCurrentDate(prev => addWeeks(prev, 1));
+      }
     }
+    
+    setTouchStartX(null);
   };
 
   const getDefaultPrice = (roomId: number) => {
@@ -211,8 +218,20 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     return room?.base_price || 0;
   };
 
-  const handleDateRangeChange = (start: Date | null, end: Date | null) => {
-    setSelectedDateRange({ start, end });
+  const handleDateClick = (day: Date, roomId: number) => {
+    if (isDragging) return;
+    
+    setSelectedRoom(roomId);
+    if (!selectedDateRange.start) {
+      setSelectedDateRange({ start: day, end: null });
+    } else if (!selectedDateRange.end && !isSameDay(selectedDateRange.start, day)) {
+      setSelectedDateRange(prev => ({
+        start: prev.start,
+        end: day
+      }));
+    } else {
+      setSelectedDateRange({ start: day, end: null });
+    }
   };
 
   const handleBulkPriceUpdate = async (price: number) => {
@@ -231,7 +250,6 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
       toast.success('Prezzi aggiornati con successo');
-      // Refresh availability data for affected months
       const uniqueMonths = new Set(daysToUpdate.map(day => day.date.substring(0, 7)));
       uniqueMonths.forEach(month => {
         fetchAvailability(month);
@@ -258,7 +276,6 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     try {
       await availabilityApi.bulkUpdateAvailability(daysToUpdate);
       toast.success('Disponibilità aggiornata con successo');
-      // Refresh availability data for affected months
       const uniqueMonths = new Set(daysToUpdate.map(day => day.date.substring(0, 7)));
       uniqueMonths.forEach(month => {
         fetchAvailability(month);
@@ -283,130 +300,102 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     return dayAvailability?.price_override || getDefaultPrice(roomId);
   };
 
-  const handleDragStart = (event: any) => {
-    const { date, roomId } = event.active.data.current;
-    setSelectedRoom(roomId);
-    setSelectedDateRange({ start: date, end: date });
-    setIsDragging(true);
-  };
+  const renderWeekView = (room: any) => {
+    const startOfCurrentWeek = startOfWeek(currentDate, { weekStartsOn: 1 });
+    const endOfCurrentWeek = endOfWeek(currentDate, { weekStartsOn: 1 });
+    const days = eachDayOfInterval({ start: startOfCurrentWeek, end: endOfCurrentWeek });
 
-  const handleDragMove = (event: any) => {
-    if (!isDragging || !selectedDateRange.start) return;
-    
-    const { date } = event.active.data.current;
-    const start = selectedDateRange.start;
-    
-    setSelectedDateRange({
-      start: isBefore(start, date) ? start : date,
-      end: isBefore(start, date) ? date : start
-    });
-  };
+    return (
+      <div 
+        className="touch-pan-x"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="grid grid-cols-7 gap-1 mb-4">
+          {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((day) => (
+            <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+              {day}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {days.map(day => {
+            const isAvailable = getAvailabilityStatus(day, room.id);
+            const isSelected = selectedDateRange.start && 
+              (selectedDateRange.end 
+                ? isWithinInterval(day, {
+                    start: selectedDateRange.start,
+                    end: selectedDateRange.end
+                  })
+                : isSameDay(day, selectedDateRange.start));
+            const dayPrice = getDatePrice(day, room.id);
+            const isCurrentDay = isToday(day);
+            const isNextDay = isTomorrow(day);
 
-  const handleDragEnd = () => {
-    setIsDragging(false);
-  };
-
-  const handleDateClick = (day: Date, roomId: number) => {
-    if (isDragging) return;
-    
-    setSelectedRoom(roomId);
-    if (!selectedDateRange.start) {
-      setSelectedDateRange({ start: day, end: null });
-    } else if (!selectedDateRange.end && !isSameDay(selectedDateRange.start, day)) {
-      setSelectedDateRange(prev => ({
-        start: prev.start,
-        end: day
-      }));
-    } else {
-      setSelectedDateRange({ start: day, end: null });
-    }
+            return (
+              <div
+                key={day.toString()}
+                onClick={() => handleDateClick(day, room.id)}
+                className={cn(
+                  'min-h-[60px] p-2 rounded-lg text-sm transition-all relative cursor-pointer select-none',
+                  isCurrentDay && 'ring-2 ring-blue-500',
+                  isNextDay && 'ring-1 ring-blue-300',
+                  isSelected && 'bg-blue-200 hover:bg-blue-300',
+                  !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300')
+                )}
+              >
+                <div className="flex flex-col h-full">
+                  <span className={cn(
+                    "block font-medium mb-1",
+                    isCurrentDay && "text-blue-700",
+                    isNextDay && "text-blue-600"
+                  )}>
+                    {format(day, 'd')}
+                  </span>
+                  {dayPrice && (
+                    <span className="text-xs font-medium text-gray-700">
+                      €{dayPrice}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
       <div className="md:col-span-2">
-        <div 
-          ref={containerRef}
-          onScroll={handleScroll}
-          className={cn('bg-white rounded-lg shadow-lg p-6 max-h-[800px] overflow-y-auto', className)}
-        >
+        <div className={cn('bg-white rounded-lg shadow-lg p-4 md:p-6', className)}>
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={() => setCurrentDate(prev => subWeeks(prev, 1))}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+            <h3 className="text-lg font-medium">
+              {format(currentDate, 'MMMM yyyy', { locale: it })}
+            </h3>
+            <button
+              onClick={() => setCurrentDate(prev => addWeeks(prev, 1))}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          </div>
+
           <DndContext
             sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragMove={handleDragMove}
-            onDragEnd={handleDragEnd}
+            onDragEnd={() => setIsDragging(false)}
           >
             {rooms.map(room => (
               <div key={room.id} className="mb-8">
                 <h3 className="text-lg font-semibold mb-4 text-gray-900">{room.name}</h3>
-                {visibleMonths.map(month => (
-                  <div key={format(month, 'yyyy-MM')} className="mb-8">
-                    <h4 className="text-md font-medium mb-4 text-gray-700">
-                      {format(month, 'MMMM yyyy', { locale: it })}
-                    </h4>
-                    <div className="grid grid-cols-7 gap-1">
-                      {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map((day) => (
-                        <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
-                          {day}
-                        </div>
-                      ))}
-                      {eachDayOfInterval({
-                        start: startOfMonth(month),
-                        end: endOfMonth(month)
-                      }).map(day => {
-                        const isAvailable = getAvailabilityStatus(day, room.id);
-                        const isSelected = selectedDateRange.start && 
-                          (selectedDateRange.end 
-                            ? isWithinInterval(day, {
-                                start: selectedDateRange.start,
-                                end: selectedDateRange.end
-                              })
-                            : isSameDay(day, selectedDateRange.start));
-                        const dayPrice = getDatePrice(day, room.id);
-
-                        return (
-                          <div
-                            key={day.toString()}
-                            data-date={format(day, 'yyyy-MM-dd')}
-                            draggable
-                            onClick={() => handleDateClick(day, room.id)}
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData('text/plain', '');
-                              handleDragStart({
-                                active: {
-                                  data: { current: { date: day, roomId: room.id } }
-                                }
-                              });
-                            }}
-                            onDragEnter={(e) => {
-                              e.preventDefault();
-                              handleDragMove({
-                                active: {
-                                  data: { current: { date: day, roomId: room.id } }
-                                }
-                              });
-                            }}
-                            onDragEnd={handleDragEnd}
-                            className={cn(
-                              'h-16 w-full rounded-lg text-sm p-2 transition-all relative cursor-pointer select-none',
-                              !isSameMonth(day, month) && 'text-gray-400 bg-gray-50',
-                              isToday(day) && 'border-2 border-blue-500',
-                              isSelected && 'bg-blue-200 hover:bg-blue-300',
-                              !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300')
-                            )}
-                          >
-                            <span className="block font-medium">{format(day, 'd')}</span>
-                            {dayPrice && (
-                              <span className="absolute bottom-1 right-1 text-xs font-medium text-gray-700">
-                                €{dayPrice}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                {renderWeekView(room)}
               </div>
             ))}
           </DndContext>
@@ -421,7 +410,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
           <DateRangePicker
             startDate={selectedDateRange.start}
             endDate={selectedDateRange.end}
-            onDateChange={handleDateRangeChange}
+            onDateChange={(start, end) => setSelectedDateRange({ start, end })}
           />
         </div>
 
