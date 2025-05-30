@@ -32,9 +32,18 @@ export const availabilityApi = {
   },
 
   updateAvailability: async (id: number, updates: Partial<Availability>) => {
+    // Validate updates before applying
+    if (updates.price_override !== undefined && updates.price_override < 0) {
+      throw new Error('Price cannot be negative');
+    }
+
     const { data, error } = await supabase
       .from('availability')
-      .update(updates)
+      .update({
+        ...updates,
+        // Ensure availability is explicitly set when updating price
+        available: updates.price_override !== undefined ? true : updates.available
+      })
       .eq('id', id)
       .select()
       .single();
@@ -43,13 +52,42 @@ export const availabilityApi = {
   },
 
   bulkUpdateAvailability: async (updates: Partial<Availability>[]) => {
+    // Validate all updates before processing
+    updates.forEach(update => {
+      if (update.price_override !== undefined && update.price_override < 0) {
+        throw new Error('Price cannot be negative');
+      }
+    });
+
+    const processedUpdates = updates.map(update => ({
+      ...update,
+      // Ensure availability is true when setting price
+      available: update.price_override !== undefined ? true : update.available
+    }));
+
     const { data, error } = await supabase
       .from('availability')
-      .upsert(updates, {
+      .upsert(processedUpdates, {
         onConflict: 'room_id,date',
         ignoreDuplicates: false
-      });
+      })
+      .select();
+    
     if (error) throw error;
     return data;
+  },
+
+  resetAvailability: async (roomId: number, dates: string[]) => {
+    const { error } = await supabase
+      .from('availability')
+      .update({
+        available: true,
+        blocked_reason: null,
+        price_override: null
+      })
+      .in('date', dates)
+      .eq('room_id', roomId);
+    
+    if (error) throw error;
   }
 };
