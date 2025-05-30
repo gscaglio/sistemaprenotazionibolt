@@ -3,9 +3,15 @@ import { it } from 'date-fns/locale';
 import type { Booking } from '../types';
 
 class NotificationService {
-  private RESEND_API_KEY = 're_RMtRoheL_7gfdkMse8rxxyayiNDThUrRZ';
-  private WHATSAPP_PHONE = '+393487925668';
-  private WHATSAPP_API_KEY = '1967589';
+  private RESEND_API_KEY = import.meta.env.VITE_RESEND_API_KEY;
+  private WHATSAPP_PHONE = import.meta.env.VITE_WHATSAPP_PHONE;
+  private WHATSAPP_API_KEY = import.meta.env.VITE_WHATSAPP_API_KEY;
+
+  constructor() {
+    if (!this.RESEND_API_KEY) throw new Error('Missing Resend API key');
+    if (!this.WHATSAPP_PHONE) throw new Error('Missing WhatsApp phone number');
+    if (!this.WHATSAPP_API_KEY) throw new Error('Missing WhatsApp API key');
+  }
 
   async sendWhatsAppNotification(booking: Booking) {
     const checkIn = format(new Date(booking.check_in), 'dd/MM/yyyy', { locale: it });

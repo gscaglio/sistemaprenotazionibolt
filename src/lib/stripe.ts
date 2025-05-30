@@ -1,5 +1,9 @@
 import Stripe from 'stripe';
 
-export const stripe = new Stripe('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', {
+if (!import.meta.env.VITE_STRIPE_SECRET_KEY) {
+  throw new Error('Missing Stripe secret key');
+}
+
+export const stripe = new Stripe(import.meta.env.VITE_STRIPE_SECRET_KEY, {
   apiVersion: '2023-10-16',
 });
