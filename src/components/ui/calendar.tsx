@@ -333,7 +333,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                   'min-h-[60px] p-2 rounded-lg text-sm transition-all relative cursor-pointer select-none',
                   isCurrentDay && 'ring-2 ring-blue-500',
                   isNextDay && 'ring-1 ring-blue-300',
-                  isSelected && 'bg-blue-200 hover:bg-blue-300',
+                  isSelected && 'bg-gray-200 hover:bg-gray-300',
                   !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300')
                 )}
               >
