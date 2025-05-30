@@ -207,10 +207,18 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     if (!selectedDateRange.start) {
       setSelectedDateRange({ start: day, end: null });
     } else if (!selectedDateRange.end && !isSameDay(selectedDateRange.start, day)) {
-      setSelectedDateRange(prev => ({
-        start: prev.start,
-        end: day
-      }));
+      // Ensure end date is always after start date
+      if (day < selectedDateRange.start) {
+        setSelectedDateRange({
+          start: day,
+          end: selectedDateRange.start
+        });
+      } else {
+        setSelectedDateRange(prev => ({
+          start: prev.start,
+          end: day
+        }));
+      }
     } else {
       setSelectedDateRange({ start: day, end: null });
     }
@@ -310,8 +318,8 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
             const isSelected = selectedDateRange.start && 
               (selectedDateRange.end 
                 ? isWithinInterval(day, {
-                    start: selectedDateRange.start,
-                    end: selectedDateRange.end
+                    start: new Date(Math.min(selectedDateRange.start.getTime(), selectedDateRange.end.getTime())),
+                    end: new Date(Math.max(selectedDateRange.start.getTime(), selectedDateRange.end.getTime()))
                   })
                 : isSameDay(day, selectedDateRange.start));
             const dayPrice = getDatePrice(day, room.id);
