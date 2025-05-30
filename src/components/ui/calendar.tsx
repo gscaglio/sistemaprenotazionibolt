@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore, addDays } from 'date-fns';
+import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore, addDays, isAfter } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
@@ -30,11 +30,22 @@ interface BulkEditPanelProps {
   onUpdateAvailability: (available: boolean) => void;
 }
 
+const MAX_MONTHS = 16;
+const MAX_DATE = addMonths(new Date(), MAX_MONTHS);
+
 function DateRangePicker({ startDate, endDate, onDateChange }: DateRangePickerProps) {
   const [error, setError] = useState('');
 
   const handleDateChange = (start: Date | null, end: Date | null) => {
     setError('');
+    if (start && isAfter(start, MAX_DATE)) {
+      setError(`Non puoi selezionare date oltre ${format(MAX_DATE, 'dd/MM/yyyy')}`);
+      return;
+    }
+    if (end && isAfter(end, MAX_DATE)) {
+      setError(`Non puoi selezionare date oltre ${format(MAX_DATE, 'dd/MM/yyyy')}`);
+      return;
+    }
     if (start && end) {
       try {
         dateRangeSchema.parse({ startDate: start, endDate: end });
@@ -58,6 +69,7 @@ function DateRangePicker({ startDate, endDate, onDateChange }: DateRangePickerPr
           value={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
           onChange={(e) => handleDateChange(e.target.value ? new Date(e.target.value) : null, endDate)}
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          max={format(MAX_DATE, 'yyyy-MM-dd')}
         />
       </div>
       <div>
@@ -67,6 +79,7 @@ function DateRangePicker({ startDate, endDate, onDateChange }: DateRangePickerPr
           value={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
           onChange={(e) => handleDateChange(startDate, e.target.value ? new Date(e.target.value) : null)}
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          max={format(MAX_DATE, 'yyyy-MM-dd')}
         />
       </div>
       {error && (
@@ -88,7 +101,7 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
       const numericPrice = Number(price);
       priceSchema.parse({ price: numericPrice });
       onUpdatePrice(numericPrice);
-      setPrice(''); // Reset price after successful update
+      setPrice('');
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -188,9 +201,17 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       const lastMonth = prev[prev.length - 1];
       
       if (direction === 'prev') {
-        return [subMonths(firstMonth, 1), ...prev.slice(0, -1)];
+        const prevMonth = subMonths(firstMonth, 1);
+        if (isBefore(prevMonth, new Date())) {
+          return prev;
+        }
+        return [prevMonth, ...prev.slice(0, -1)];
       } else {
-        return [...prev.slice(1), addMonths(lastMonth, 1)];
+        const nextMonth = addMonths(lastMonth, 1);
+        if (isAfter(nextMonth, MAX_DATE)) {
+          return prev;
+        }
+        return [...prev.slice(1), nextMonth];
       }
     });
   }, []);
@@ -201,12 +222,11 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleDateClick = (day: Date, roomId: number) => {
-    if (roomId !== currentRoomId) return;
+    if (roomId !== currentRoomId || isAfter(day, MAX_DATE)) return;
     
     if (!selectedDateRange.start) {
       setSelectedDateRange({ start: day, end: null });
     } else if (!selectedDateRange.end && !isSameDay(selectedDateRange.start, day)) {
-      // Ensure end date is always after start date
       if (isBefore(day, selectedDateRange.start)) {
         setSelectedDateRange({
           start: day,
@@ -224,7 +244,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleMouseEnter = (day: Date) => {
-    if (isDragging && selectedDateRange.start && !isSameDay(selectedDateRange.start, day)) {
+    if (isDragging && selectedDateRange.start && !isSameDay(selectedDateRange.start, day) && !isAfter(day, MAX_DATE)) {
       setSelectedDateRange(prev => ({
         start: prev.start,
         end: day
@@ -315,12 +335,14 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
             <button
               onClick={() => handleScroll('prev')}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              disabled={isBefore(subMonths(month, 1), new Date())}
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
             <button
               onClick={() => handleScroll('next')}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              disabled={isAfter(addMonths(month, 1), MAX_DATE)}
             >
               <ChevronRight className="h-5 w-5" />
             </button>
@@ -349,13 +371,16 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
             const dayPrice = getDatePrice(day, room.id);
             const isCurrentDay = isToday(day);
             const isNextDay = isTomorrow(day);
+            const isFutureDate = isAfter(day, MAX_DATE);
 
             return (
               <div
                 key={day.toString()}
                 onMouseDown={() => {
-                  handleDateClick(day, room.id);
-                  setIsDragging(true);
+                  if (!isFutureDate) {
+                    handleDateClick(day, room.id);
+                    setIsDragging(true);
+                  }
                 }}
                 onMouseEnter={() => handleMouseEnter(day)}
                 onMouseUp={() => setIsDragging(false)}
@@ -364,18 +389,20 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
                   isCurrentDay && 'ring-2 ring-gray-900',
                   isNextDay && 'ring-1 ring-gray-600',
                   isSelected && 'bg-gray-200 hover:bg-gray-300',
-                  !isSelected && (isAvailable ? 'bg-green-100 hover:bg-green-200' : 'bg-red-100 hover:bg-red-200')
+                  !isSelected && !isFutureDate && (isAvailable ? 'bg-green-100 hover:bg-green-200' : 'bg-red-100 hover:bg-red-200'),
+                  isFutureDate && 'bg-gray-100 cursor-not-allowed opacity-50'
                 )}
               >
                 <div className="flex flex-col h-full">
                   <span className={cn(
                     "block font-medium mb-1",
                     isCurrentDay && "text-gray-900",
-                    isNextDay && "text-gray-800"
+                    isNextDay && "text-gray-800",
+                    isFutureDate && "text-gray-400"
                   )}>
                     {format(day, 'd')}
                   </span>
-                  {dayPrice && (
+                  {dayPrice && !isFutureDate && (
                     <span className="text-xs font-medium text-gray-700">
                       €{dayPrice}
                     </span>
