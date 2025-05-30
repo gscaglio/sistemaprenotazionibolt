@@ -43,27 +43,57 @@ export const availabilityApi = {
   },
 
   bulkUpdateAvailability: async (updates: Partial<Availability>[]) => {
-    // First, delete any existing records for these dates and room
-    if (updates.length > 0) {
-      const roomId = updates[0].room_id;
-      const dates = updates.map(u => u.date);
-      
-      const { error: deleteError } = await supabase
-        .from('availability')
-        .delete()
-        .eq('room_id', roomId)
-        .in('date', dates);
+    console.log('Starting bulkUpdateAvailability with updates:', updates);
+
+    try {
+      // First, delete any existing records for these dates and room
+      if (updates.length > 0) {
+        const roomId = updates[0].room_id;
+        const dates = updates.map(u => u.date);
         
-      if (deleteError) throw deleteError;
+        console.log('Deleting existing records for:', {
+          roomId,
+          dates,
+        });
+
+        const { error: deleteError } = await supabase
+          .from('availability')
+          .delete()
+          .eq('room_id', roomId)
+          .in('date', dates);
+          
+        if (deleteError) {
+          console.error('Error deleting existing records:', deleteError);
+          throw deleteError;
+        }
+
+        console.log('Successfully deleted existing records');
+      }
+
+      // Then insert the new records
+      console.log('Inserting new records:', updates);
+
+      const { data, error } = await supabase
+        .from('availability')
+        .insert(updates)
+        .select();
+
+      if (error) {
+        console.error('Error inserting new records:', {
+          error,
+          errorMessage: error.message,
+          errorDetails: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw error;
+      }
+
+      console.log('Successfully inserted new records:', data);
+      return data;
+    } catch (error) {
+      console.error('Unexpected error in bulkUpdateAvailability:', error);
+      throw error;
     }
-
-    // Then insert the new records
-    const { data, error } = await supabase
-      .from('availability')
-      .insert(updates)
-      .select();
-
-    if (error) throw error;
-    return data;
   }
 };
