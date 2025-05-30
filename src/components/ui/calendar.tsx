@@ -639,14 +639,6 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     }
   };
 
-  // const getAvailabilityStatus = (date: Date, roomId: number) => {
-  //   return getAvailabilityInfo(date, roomId).isAvailable;
-  // };
-
-  // const getDatePrice = (date: Date, roomId: number) => {
-  //   return getAvailabilityInfo(date, roomId).displayPrice;
-  // };
-
   /**
    * Renders a single month view for a given room.
    * Includes month navigation and the grid of days with their respective styles and prices.
@@ -689,81 +681,75 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
           ))}
         </div>
         <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: monthStart.getDay() - 1 }).map((_, index) => (
+          {Array.from({ length: monthStart.getDay() - 1 }).map((_, index) =>
             <div key={`empty-${index}`} className="min-h-[60px]" />
-          ))}
+          )}
           {days.map(day => {
-            const dayInfo = getAvailabilityInfo(day, room.id); // Main source of truth for day's state
+            const dayInfo = getAvailabilityInfo(day, room.id);
             const isSelected = selectedDateRange.start && 
               (selectedDateRange.end 
-                ? isWithinInterval(day, { // Check if day is within the selected start/end range
+                ? isWithinInterval(day, {
                     start: new Date(Math.min(selectedDateRange.start.getTime(), selectedDateRange.end.getTime())),
                     end: new Date(Math.max(selectedDateRange.start.getTime(), selectedDateRange.end.getTime()))
                   })
-                : isSameDay(day, selectedDateRange.start)); // Or if it's the single selected start date
+                : isSameDay(day, selectedDateRange.start));
             
             const isCurrentDay = isToday(day);
             const isNextDay = isTomorrow(day);
-            const isFutureDate = isAfter(day, MAX_DATE); // Dates beyond the allowed booking horizon
+            const isFutureDate = isAfter(day, MAX_DATE);
 
-            // Determine cell styling based on its state
-            let dayStyle = 'bg-gray-100 cursor-not-allowed opacity-50'; // Default for future/disabled dates
+            let dayStyle = 'bg-gray-100 cursor-not-allowed opacity-50';
 
-            if (!isFutureDate) { // Only apply active styling for dates within allowed horizon
+            if (!isFutureDate) {
               if (dayInfo.isAvailable) {
                 if (dayInfo.hasPriceOverride) {
-                  // Available with a specific price override
-                  dayStyle = 'bg-green-200 hover:bg-green-300 border border-green-400'; 
+                  dayStyle = 'bg-green-200 hover:bg-green-300 border border-green-400';
                 } else {
-                  // Available at base price
-                  dayStyle = 'bg-green-100 hover:bg-green-200'; 
+                  dayStyle = 'bg-green-100 hover:bg-green-200';
                 }
               } else {
-                // Unavailable (blocked)
-                dayStyle = 'bg-red-100 hover:bg-red-200'; 
+                dayStyle = 'bg-red-100 hover:bg-red-200';
               }
             }
 
-            if (isSelected) { // Selected style overrides others, except for future dates
-              dayStyle = isFutureDate ? dayStyle : 'bg-gray-300 hover:bg-gray-400'; 
+            if (isSelected) {
+              dayStyle = isFutureDate ? dayStyle : 'bg-gray-300 hover:bg-gray-400';
             }
-
 
             return (
               <div
                 key={day.toString()}
-                onMouseDown={(e) => { 
-                  e.preventDefault(); 
+                onMouseDown={(e) => {
+                  e.preventDefault();
                   if (!isFutureDate) {
-                    // console.log('Calendar: onMouseDown on day cell.', { day: format(day, 'yyyy-MM-dd') });
                     handleDateClick(day, room.id);
                     setIsDragging(true);
                   }
                 }}
                 onMouseEnter={() => {
-                  if (!isFutureDate) { 
+                  if (!isFutureDate) {
                     handleMouseEnter(day);
                   }
                 }}
                 className={cn(
                   'min-h-[60px] p-2 rounded-lg text-sm transition-all relative cursor-pointer select-none',
-                  isCurrentDay && 'ring-2 ring-blue-600', // Today
-                  isNextDay && 'ring-1 ring-blue-400',   // Tomorrow
+                  isCurrentDay && 'ring-2 ring-blue-600',
+                  isNextDay && 'ring-1 ring-blue-400',
                   dayStyle
                 )}
               >
                 <div className="flex flex-col h-full">
                   <span className={cn(
-                    "block font-medium mb-1", // Removed ring-gray-900/600 from here, moved to parent div
+                    "block font-medium mb-1",
                     isCurrentDay && "text-gray-900",
                     isNextDay && "text-gray-800",
                     isFutureDate && "text-gray-400"
                   )}>
                     {format(day, 'd')}
                   </span>
-                  {dayPrice && !isFutureDate && (
+                  {!isFutureDate && (
                     <span className="text-xs font-medium text-gray-700">
-                      €{dayPrice}
+                      €{dayInfo.displayPrice}
                     </span>
                   )}
                 </div>
@@ -782,7 +768,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
           'bg-white rounded-lg shadow-lg p-4 md:p-6 max-h-[800px] overflow-y-auto',
           className
         )}>
-          {storeIsLoading && ( // Global loading indicator for fetching
+          {storeIsLoading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
               <p className="text-lg font-semibold">Caricamento disponibilità...</p>
             </div>
@@ -813,8 +799,8 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
           onUpdatePrice={handleBulkPriceUpdate}
           onUpdateAvailability={handleBulkAvailabilityUpdate}
           onRevertToBasePrice={handleRevertToBasePrice}
-          isUpdating={isBulkUpdating} 
-          currentPriceDisplay={bulkEditPanelInfo.priceDisplay} // Pass calculated display price
+          isUpdating={isBulkUpdating}
+          currentPriceDisplay={bulkEditPanelInfo.priceDisplay}
         />
       </div>
     </div>
