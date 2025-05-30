@@ -1,8 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { addDays, addWeeks, subWeeks, format, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore } from 'date-fns';
+import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { useState, useEffect, useRef } from 'react';
-import { DndContext, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { useState, useEffect } from 'react';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -160,29 +159,18 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     start: null,
     end: null
   });
-  const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   
   const { rooms } = useRoomStore();
   const { availability, fetchAvailability } = useAvailabilityStore();
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const mouseSensor = useSensor(MouseSensor, {
-    activationConstraint: {
-      distance: 0,
-    },
-  });
-  const sensors = useSensors(mouseSensor);
 
   useEffect(() => {
-    // Fetch availability for current week and next week
-    const startOfCurrentWeek = startOfWeek(currentDate, { weekStartsOn: 1 });
-    const endOfNextWeek = endOfWeek(addWeeks(currentDate, 1), { weekStartsOn: 1 });
+    const startOfCurrentMonth = startOfMonth(currentDate);
+    const endOfCurrentMonth = endOfMonth(currentDate);
     
     const months = new Set([
-      format(startOfCurrentWeek, 'yyyy-MM'),
-      format(endOfNextWeek, 'yyyy-MM')
+      format(startOfCurrentMonth, 'yyyy-MM'),
+      format(endOfCurrentMonth, 'yyyy-MM')
     ]);
     
     months.forEach(month => {
@@ -202,11 +190,11 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     
     if (Math.abs(diff) > 50) { // Minimum swipe distance
       if (diff > 0) {
-        // Swipe right - previous week
-        setCurrentDate(prev => subWeeks(prev, 1));
+        // Swipe right - previous month
+        setCurrentDate(prev => subMonths(prev, 1));
       } else {
-        // Swipe left - next week
-        setCurrentDate(prev => addWeeks(prev, 1));
+        // Swipe left - next month
+        setCurrentDate(prev => addMonths(prev, 1));
       }
     }
     
@@ -219,9 +207,8 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleDateClick = (day: Date, roomId: number) => {
-    if (isDragging) return;
+    if (roomId !== currentRoomId) return;
     
-    setSelectedRoom(roomId);
     if (!selectedDateRange.start) {
       setSelectedDateRange({ start: day, end: null });
     } else if (!selectedDateRange.end && !isSameDay(selectedDateRange.start, day)) {
@@ -235,13 +222,13 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleBulkPriceUpdate = async (price: number) => {
-    if (!selectedDateRange.start || !selectedDateRange.end || !selectedRoom) return;
+    if (!selectedDateRange.start || !selectedDateRange.end || !currentRoomId) return;
 
     const daysToUpdate = eachDayOfInterval({
       start: selectedDateRange.start,
       end: selectedDateRange.end
     }).map(date => ({
-      room_id: selectedRoom,
+      room_id: currentRoomId,
       date: format(date, 'yyyy-MM-dd'),
       price_override: price,
       available: true
@@ -260,17 +247,17 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const handleBulkAvailabilityUpdate = async (available: boolean) => {
-    if (!selectedDateRange.start || !selectedRoom) return;
+    if (!selectedDateRange.start || !currentRoomId) return;
 
     const daysToUpdate = eachDayOfInterval({
       start: selectedDateRange.start,
       end: selectedDateRange.end || selectedDateRange.start
     }).map(date => ({
-      room_id: selectedRoom,
+      room_id: currentRoomId,
       date: format(date, 'yyyy-MM-dd'),
       available,
       blocked_reason: available ? null : 'manual_block',
-      price_override: available ? getDefaultPrice(selectedRoom) : null
+      price_override: available ? getDefaultPrice(currentRoomId) : null
     }));
 
     try {
@@ -300,10 +287,12 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     return dayAvailability?.price_override || getDefaultPrice(roomId);
   };
 
-  const renderWeekView = (room: any) => {
-    const startOfCurrentWeek = startOfWeek(currentDate, { weekStartsOn: 1 });
-    const endOfCurrentWeek = endOfWeek(currentDate, { weekStartsOn: 1 });
-    const days = eachDayOfInterval({ start: startOfCurrentWeek, end: endOfCurrentWeek });
+  const renderMonthView = (room: any) => {
+    if (currentRoomId && room.id !== currentRoomId) return null;
+
+    const startOfCurrentMonth = startOfMonth(currentDate);
+    const endOfCurrentMonth = endOfMonth(currentDate);
+    const days = eachDayOfInterval({ start: startOfCurrentMonth, end: endOfCurrentMonth });
 
     return (
       <div 
@@ -319,6 +308,9 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
           ))}
         </div>
         <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: startOfCurrentMonth.getDay() - 1 }).map((_, index) => (
+            <div key={`empty-${index}`} className="min-h-[60px]" />
+          ))}
           {days.map(day => {
             const isAvailable = getAvailabilityStatus(day, room.id);
             const isSelected = selectedDateRange.start && 
@@ -372,7 +364,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
         <div className={cn('bg-white rounded-lg shadow-lg p-4 md:p-6', className)}>
           <div className="flex items-center justify-between mb-6">
             <button
-              onClick={() => setCurrentDate(prev => subWeeks(prev, 1))}
+              onClick={() => setCurrentDate(prev => subMonths(prev, 1))}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <ChevronLeft className="h-6 w-6" />
@@ -381,24 +373,18 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
               {format(currentDate, 'MMMM yyyy', { locale: it })}
             </h3>
             <button
-              onClick={() => setCurrentDate(prev => addWeeks(prev, 1))}
+              onClick={() => setCurrentDate(prev => addMonths(prev, 1))}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <ChevronRight className="h-6 w-6" />
             </button>
           </div>
 
-          <DndContext
-            sensors={sensors}
-            onDragEnd={() => setIsDragging(false)}
-          >
-            {rooms.map(room => (
-              <div key={room.id} className="mb-8">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900">{room.name}</h3>
-                {renderWeekView(room)}
-              </div>
-            ))}
-          </DndContext>
+          {rooms.map(room => (
+            <div key={room.id} className="mb-8">
+              {renderMonthView(room)}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -416,7 +402,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
 
         <BulkEditPanel
           selectedDates={selectedDateRange}
-          selectedRoom={selectedRoom}
+          selectedRoom={currentRoomId}
           onUpdatePrice={handleBulkPriceUpdate}
           onUpdateAvailability={handleBulkAvailabilityUpdate}
         />
