@@ -1,6 +1,8 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event'; // For more complex interactions
+import { z } from 'zod';
+import { dateRangeSchema } from '../../lib/validations';
 import { Calendar } from './calendar'; // Adjust path as necessary
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -268,4 +270,33 @@ describe('Calendar Component', () => {
 
   // More tests could be added for single date selections, edge cases, MAX_DATE limits, etc.
   // This set provides a good starting point for the core functionalities.
+});
+
+describe('dateRangeSchema', () => {
+  it('should allow start and end dates to be the same', () => {
+    const startDate = new Date(2023, 0, 10);
+    const endDate = new Date(2023, 0, 10);
+    expect(() => dateRangeSchema.parse({ startDate, endDate })).not.toThrow();
+  });
+
+  it('should allow end date to be after start date', () => {
+    const startDate = new Date(2023, 0, 10);
+    const endDate = new Date(2023, 0, 11);
+    expect(() => dateRangeSchema.parse({ startDate, endDate })).not.toThrow();
+  });
+
+  it('should not allow end date to be before start date and provide correct error message', () => {
+    const startDate = new Date(2023, 0, 10);
+    const endDate = new Date(2023, 0, 9);
+    try {
+      dateRangeSchema.parse({ startDate, endDate });
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        expect(e.errors[0].message).toBe("La data di fine non può essere precedente alla data di inizio");
+        expect(e.errors[0].path).toContain('endDate');
+      } else {
+        throw e; // Re-throw if not a ZodError
+      }
+    }
+  });
 });
