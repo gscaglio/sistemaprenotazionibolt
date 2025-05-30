@@ -1,7 +1,7 @@
+import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore, addDays } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { useState, useEffect, useRef } from 'react';
 import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -88,6 +88,7 @@ function BulkEditPanel({ selectedDates, selectedRoom, onUpdatePrice, onUpdateAva
       const numericPrice = Number(price);
       priceSchema.parse({ price: numericPrice });
       onUpdatePrice(numericPrice);
+      setPrice(''); // Reset price after successful update
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -159,7 +160,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     start: null,
     end: null
   });
-  const calendarRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
   
   const { rooms } = useRoomStore();
   const { availability, fetchAvailability } = useAvailabilityStore();
@@ -181,19 +182,18 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     });
   }, [visibleMonths, fetchAvailability]);
 
-  const handleScroll = () => {
-    if (!calendarRef.current) return;
-    
-    const { scrollTop, scrollHeight, clientHeight } = calendarRef.current;
-    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-    
-    if (scrollPercentage > 0.8) {
-      // Add next month when scrolling near bottom
-      const lastMonth = visibleMonths[visibleMonths.length - 1];
-      const nextMonth = addMonths(lastMonth, 1);
-      setVisibleMonths(prev => [...prev, nextMonth]);
-    }
-  };
+  const handleScroll = useCallback((direction: 'prev' | 'next') => {
+    setVisibleMonths(prev => {
+      const firstMonth = prev[0];
+      const lastMonth = prev[prev.length - 1];
+      
+      if (direction === 'prev') {
+        return [subMonths(firstMonth, 1), ...prev.slice(0, -1)];
+      } else {
+        return [...prev.slice(1), addMonths(lastMonth, 1)];
+      }
+    });
+  }, []);
 
   const getDefaultPrice = (roomId: number) => {
     const room = rooms.find(r => r.id === roomId);
@@ -207,7 +207,7 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       setSelectedDateRange({ start: day, end: null });
     } else if (!selectedDateRange.end && !isSameDay(selectedDateRange.start, day)) {
       // Ensure end date is always after start date
-      if (day < selectedDateRange.start) {
+      if (isBefore(day, selectedDateRange.start)) {
         setSelectedDateRange({
           start: day,
           end: selectedDateRange.start
@@ -220,6 +220,15 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
       }
     } else {
       setSelectedDateRange({ start: day, end: null });
+    }
+  };
+
+  const handleMouseEnter = (day: Date) => {
+    if (isDragging && selectedDateRange.start && !isSameDay(selectedDateRange.start, day)) {
+      setSelectedDateRange(prev => ({
+        start: prev.start,
+        end: day
+      }));
     }
   };
 
@@ -298,9 +307,25 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
 
     return (
       <div key={format(month, 'yyyy-MM')} className="mb-8">
-        <h3 className="text-lg font-semibold mb-4 text-gray-900">
-          {format(month, 'MMMM yyyy', { locale: it })}
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {format(month, 'MMMM yyyy', { locale: it })}
+          </h3>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => handleScroll('prev')}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => handleScroll('next')}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-7 gap-1 mb-4">
           {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((day) => (
             <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
@@ -328,20 +353,25 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
             return (
               <div
                 key={day.toString()}
-                onClick={() => handleDateClick(day, room.id)}
+                onMouseDown={() => {
+                  handleDateClick(day, room.id);
+                  setIsDragging(true);
+                }}
+                onMouseEnter={() => handleMouseEnter(day)}
+                onMouseUp={() => setIsDragging(false)}
                 className={cn(
                   'min-h-[60px] p-2 rounded-lg text-sm transition-all relative cursor-pointer select-none',
-                  isCurrentDay && 'ring-2 ring-blue-500',
-                  isNextDay && 'ring-1 ring-blue-300',
+                  isCurrentDay && 'ring-2 ring-gray-900',
+                  isNextDay && 'ring-1 ring-gray-600',
                   isSelected && 'bg-gray-200 hover:bg-gray-300',
-                  !isSelected && (isAvailable ? 'bg-green-200 hover:bg-green-300' : 'bg-red-200 hover:bg-red-300')
+                  !isSelected && (isAvailable ? 'bg-green-100 hover:bg-green-200' : 'bg-red-100 hover:bg-red-200')
                 )}
               >
                 <div className="flex flex-col h-full">
                   <span className={cn(
                     "block font-medium mb-1",
-                    isCurrentDay && "text-blue-700",
-                    isNextDay && "text-blue-600"
+                    isCurrentDay && "text-gray-900",
+                    isNextDay && "text-gray-800"
                   )}>
                     {format(day, 'd')}
                   </span>
@@ -362,14 +392,10 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
       <div className="md:col-span-2">
-        <div 
-          ref={calendarRef}
-          onScroll={handleScroll}
-          className={cn(
-            'bg-white rounded-lg shadow-lg p-4 md:p-6 max-h-[800px] overflow-y-auto',
-            className
-          )}
-        >
+        <div className={cn(
+          'bg-white rounded-lg shadow-lg p-4 md:p-6 max-h-[800px] overflow-y-auto',
+          className
+        )}>
           {rooms.map(room => (
             <div key={room.id}>
               {visibleMonths.map(month => renderMonth(month, room))}
