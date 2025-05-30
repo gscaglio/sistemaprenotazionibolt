@@ -14,6 +14,9 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true
   },
+  db: {
+    schema: 'public'
+  },
   global: {
     headers: {
       'X-Client-Info': 'supabase-js-v2'
