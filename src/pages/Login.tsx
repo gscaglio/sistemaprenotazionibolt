@@ -2,19 +2,30 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { loginSchema } from '../lib/validations';
 import toast from 'react-hot-toast';
 
 function Login() {
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const navigate = useNavigate();
   const { login } = useAuth();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (login(password)) {
-      navigate('/');
-    } else {
-      toast.error('Password non valida');
+    setError('');
+
+    try {
+      loginSchema.parse({ password });
+      if (login(password)) {
+        navigate('/');
+      } else {
+        setError('Password non valida');
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      }
     }
   };
 
@@ -47,6 +58,9 @@ function Login() {
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
               </div>
+              {error && (
+                <p className="mt-2 text-sm text-red-600">{error}</p>
+              )}
             </div>
 
             <div>
@@ -64,4 +78,4 @@ function Login() {
   );
 }
 
-export default Login
+export default Login;
