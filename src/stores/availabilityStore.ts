@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Database } from '../lib/database.types';
 import { availabilityApi } from '../lib/api/availability';
+import { supabase } from '../lib/supabase'; // Added for RPC calls
 import { startOfMonth, endOfMonth, parse, format } from 'date-fns';
 import { errorLogger } from '../lib/errorLogger';
 
@@ -96,6 +97,19 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
     }
     set({ loading: true, error: null });
     try {
+      // Get user ID for logging
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('[Store] User not authenticated for bulk update logging.');
+        set({ error: 'Utente non autenticato per registrare l\'aggiornamento massivo.', loading: false });
+        return;
+      }
+      const userId = user.id;
+
+      // Log bulk update request for rate limiting
+      await supabase.rpc('log_bulk_update_request', { p_user_id: userId });
+
+      // Proceed with the actual bulk update API call
       console.log(`[Store] Calling API for bulk update with ${updates.length} updates.`);
       const returnedData = await availabilityApi.bulkUpdateAvailability(updates);
       
@@ -158,7 +172,20 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
         updatesCount: updates.length,
         sample: logSample(updates)
       });
-      set({ error: (error as Error).message, loading: false });
+
+      let errorMessage = (error as Error).message || 'Errore sconosciuto durante l\'aggiornamento massivo.';
+      // Check for specific rate limit error message from RLS
+      // The actual message might depend on how PostgREST forwards PL/pgSQL errors.
+      // We're checking for the custom message from check_bulk_update_limit.
+      if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+        if (error.message.includes('Rate limit exceeded for bulk update requests')) {
+          errorMessage = 'Hai superato il limite di richieste per gli aggiornamenti massivi. Riprova più tardi.';
+        } else if (error.message.includes('check_bulk_update_limit')) {
+          // Catching generic error related to the function if message is not specific enough
+          errorMessage = 'Limite richieste per aggiornamenti massivi superato. Riprova più tardi.';
+        }
+      }
+      set({ error: errorMessage, loading: false });
     }
   },
 }));
