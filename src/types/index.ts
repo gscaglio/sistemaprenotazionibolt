@@ -1,3 +1,16 @@
+export interface ErrorLog {
+  id?: number;
+  level: 'debug' | 'info' | 'warning' | 'error' | 'critical';
+  message: string;
+  error_stack?: string;
+  context?: Record<string, any>;
+  browser_info?: Record<string, any>;
+  user_id?: string;
+  created_at?: string;
+  resolved_at?: string;
+  resolution_notes?: string;
+}
+
 export interface Room {
   id: number;
   name: string;
