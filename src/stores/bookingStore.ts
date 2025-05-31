@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
+import { errorLogger } from '../lib/errorLogger';
 
 type Booking = Database['public']['Tables']['bookings']['Row'];
 
@@ -29,6 +30,9 @@ export const useBookingStore = create<BookingStore>((set) => ({
       if (error) throw error;
       set({ bookings: data, loading: false });
     } catch (error) {
+      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+        operation: 'fetchBookings'
+      });
       set({ error: (error as Error).message, loading: false });
     }
   },
@@ -48,6 +52,10 @@ export const useBookingStore = create<BookingStore>((set) => ({
         loading: false,
       }));
     } catch (error) {
+      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+        operation: 'createBooking',
+        booking
+      });
       set({ error: (error as Error).message, loading: false });
     }
   },
@@ -68,6 +76,11 @@ export const useBookingStore = create<BookingStore>((set) => ({
         loading: false,
       }));
     } catch (error) {
+      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+        operation: 'updateBooking',
+        id,
+        updates
+      });
       set({ error: (error as Error).message, loading: false });
     }
   },
@@ -86,6 +99,10 @@ export const useBookingStore = create<BookingStore>((set) => ({
         loading: false,
       }));
     } catch (error) {
+      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+        operation: 'deleteBooking',
+        id
+      });
       set({ error: (error as Error).message, loading: false });
     }
   },

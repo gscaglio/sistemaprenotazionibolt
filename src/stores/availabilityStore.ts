@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Database } from '../lib/database.types';
 import { availabilityApi } from '../lib/api/availability';
 import { startOfMonth, endOfMonth, parse, format } from 'date-fns';
+import { errorLogger } from '../lib/errorLogger';
 
 type Availability = Database['public']['Tables']['availability']['Row'];
 type AvailabilityUpdate = Partial<Availability>;
@@ -57,7 +58,10 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
         };
       });
     } catch (error) {
-      console.error(`[Store] Error fetching availability for month ${month}:`, error);
+      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+        operation: 'fetchAvailability',
+        month
+      });
       set({ error: (error as Error).message, loading: false });
     }
   },
@@ -75,7 +79,11 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
         loading: false,
       }));
     } catch (error) {
-      console.error(`[Store] Error updating availability for id: ${id}:`, error);
+      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+        operation: 'updateAvailability',
+        id,
+        updates
+      });
       set({ error: (error as Error).message, loading: false });
     }
   },
@@ -145,7 +153,11 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
       });
 
     } catch (error) {
-      console.error('[Store] Error during bulk availability update or merge process:', error);
+      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+        operation: 'updateBulkAvailability',
+        updatesCount: updates.length,
+        sample: logSample(updates)
+      });
       set({ error: (error as Error).message, loading: false });
     }
   },

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
+import { errorLogger } from '../lib/errorLogger';
 
 type Room = Database['public']['Tables']['rooms']['Row'];
 
@@ -27,6 +28,9 @@ export const useRoomStore = create<RoomStore>((set) => ({
       if (error) throw error;
       set({ rooms: data, loading: false });
     } catch (error) {
+      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+        operation: 'fetchRooms'
+      });
       set({ error: (error as Error).message, loading: false });
     }
   },
@@ -47,6 +51,11 @@ export const useRoomStore = create<RoomStore>((set) => ({
         loading: false,
       }));
     } catch (error) {
+      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+        operation: 'updateRoom',
+        id,
+        updates
+      });
       set({ error: (error as Error).message, loading: false });
     }
   },
