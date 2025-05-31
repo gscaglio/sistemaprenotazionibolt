@@ -112,22 +112,26 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
 
   const handleDateClick = (day: Date, roomId: number) => {
     if (roomId !== currentRoomId || isAfter(day, MAX_DATE)) return;
-    
+
     if (!selectedDateRange.start) {
+      // First click: set start date, end date is null
       setSelectedDateRange({ start: day, end: null });
-    } else if (!selectedDateRange.end && !isSameDay(selectedDateRange.start, day)) {
-      if (isBefore(day, selectedDateRange.start)) {
-        setSelectedDateRange({
-          start: day,
-          end: selectedDateRange.start
-        });
+    } else if (selectedDateRange.start && !selectedDateRange.end) {
+      // Start date is set, end date is not
+      if (isSameDay(selectedDateRange.start, day)) {
+        // Clicked the same day again: confirm single-day selection
+        setSelectedDateRange({ start: selectedDateRange.start, end: day });
       } else {
-        setSelectedDateRange(prev => ({
-          start: prev.start,
-          end: day
-        }));
+        // Clicked a different day: set as end date (or swap if needed)
+        if (isBefore(day, selectedDateRange.start)) {
+          setSelectedDateRange({ start: day, end: selectedDateRange.start });
+        } else {
+          setSelectedDateRange({ start: selectedDateRange.start, end: day });
+        }
       }
     } else {
+      // Both start and end are set (or a confirmed single day selection was made):
+      // Reset to start a new selection with the clicked day
       setSelectedDateRange({ start: day, end: null });
     }
   };

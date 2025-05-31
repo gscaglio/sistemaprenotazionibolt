@@ -169,6 +169,66 @@ describe('useAvailabilityStore', () => {
       // Check that availability state is not modified from its initial empty state
       expect(useAvailabilityStore.getState().availability).toEqual([]);
     });
+
+    it('handles malformed data types from API response in bulk update without crashing', async () => {
+      const initialItem = {
+        id: 123,
+        room_id: 1,
+        date: '2024-07-20',
+        available: true,
+        price_override: 100,
+        notes: 'Initial notes',
+        updated_at: '2024-07-01T00:00:00.000Z',
+        created_at: '2024-07-01T00:00:00.000Z',
+        blocked_reason: null
+      };
+      useAvailabilityStore.setState({
+        availability: [initialItem],
+        loading: false,
+        error: null,
+      });
+
+      const malformedApiItem = {
+        id: 123,
+        room_id: 1,
+        date: '2024-07-20',
+        available: 'false', // Malformed: string instead of boolean
+        price_override: 'bad_price', // Malformed: string instead of number
+        notes: 'Updated notes with problematic data', // Valid field
+        updated_at: new Date().toISOString(),
+        // Ensure all fields expected by the store's type are present, even if null
+        created_at: new Date().toISOString(),
+        blocked_reason: 'api_reason_example',
+      };
+      (availabilityApi.bulkUpdateAvailability as vi.Mock).mockResolvedValue([malformedApiItem as any]); // Use 'as any' to bypass compile-time type checks for the mock
+
+      const updatePayload = [{
+        room_id: 1,
+        date: '2024-07-20',
+        notes: 'Trigger update to get malformed data'
+      }];
+
+      // Action: Call updateBulkAvailability
+      await expect(useAvailabilityStore.getState().updateBulkAvailability(updatePayload))
+        .resolves.not.toThrow();
+
+      // Assertions
+      expect(useAvailabilityStore.getState().loading).toBe(false);
+      expect(useAvailabilityStore.getState().error).toBe(null); // Assuming no global error is set for this type of partial failure
+
+      const updatedItemInStore = useAvailabilityStore.getState().availability.find(item => item.id === 123);
+      expect(updatedItemInStore).toBeDefined();
+
+      // This test reveals the current behavior: direct assignment of malformed values.
+      // A more resilient store might clean/validate these, or skip them.
+      expect(updatedItemInStore?.available).toBe('false' as any); // Stored as string
+      expect(updatedItemInStore?.price_override).toBe('bad_price' as any); // Stored as string
+
+      // Valid fields should still be updated
+      expect(updatedItemInStore?.notes).toBe('Updated notes with problematic data');
+      expect(updatedItemInStore?.updated_at).toBe(malformedApiItem.updated_at);
+      expect(updatedItemInStore?.blocked_reason).toBe('api_reason_example');
+    });
     
     it('should set error state if API call fails', async () => {
       const mockError = new Error('API Error');

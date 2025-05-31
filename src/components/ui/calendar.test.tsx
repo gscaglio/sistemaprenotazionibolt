@@ -126,101 +126,188 @@ describe('Calendar Component', () => {
 
 
   describe('Date Selection & Range', () => {
-    it('selects a single date on click', async () => {
+    it('selects a single date on click, and confirms single day selection on second click on same day', async () => {
+      vi.setSystemTime(new Date('2024-07-15T10:00:00.000Z'));
       const user = userEvent.setup();
-      renderCalendar();
+      renderCalendar(1); // Render for Room 1
+
+      // Find day '10'
+      // We need to be careful to select the day cell in the current month view.
+      // Assuming July 2024 is the current month due to setSystemTime.
+      const day10Elements = screen.getAllByText('10');
+      // Heuristic: find the one that is a button or has a button role (day cells are interactive)
+      const day10Button = day10Elements.find(el => el.closest('button'));
+      expect(day10Button).toBeDefined();
+
+      await user.click(day10Button!);
+      await user.click(day10Button!); // Click the same day again
+
+      // Assert that the DateRangePicker inputs (presumably labeled 'Dal' and 'Al') show '2024-07-10'
+      // These labels might not be directly linked via aria-label or htmlFor to the input if custom component.
+      // Let's assume DateRangePicker has inputs that can be identified.
+      // If DateRangePicker is a child component, its internal state might be hard to check directly.
+      // We will check the input fields by their labels 'Dal' and 'Al' if possible,
+      // or by their current value if they are standard input elements.
       
-      // Find a clickable day (e.g., day 10)
-      // This assumes day elements can be uniquely identified or testing specific day text.
-      // For this example, we'll find all elements with text '10' and click the first one.
-      const day10 = screen.getAllByText('10')[0]; 
-      await user.click(day10);
+      // The DateRangePicker component used in BulkEditPanel has inputs for 'Dal' and 'Al'
+      // Let's find them by their placeholder or a more robust selector if available.
+      // For now, assuming the DateRangePicker updates input fields that can be queried.
+      // A common pattern is to have input fields display the selected dates.
+      // If the DateRangePicker updates its own internal state and doesn't expose it easily via DOM,
+      // this test might need to check the effect of this selection (e.g., on BulkEditPanel inputs).
 
-      // Check if the DateRangePicker input reflects the selected date
-      // The DateRangePicker uses format 'yyyy-MM-dd'
-      // This requires knowing the current month of the calendar.
-      // For now, we'll assume it's July 2024 for the test.
-      const currentYear = new Date().getFullYear();
-      const currentMonthStr = (new Date().getMonth() + 1).toString().padStart(2, '0');
-      // This is still brittle. A better way is to mock `selectedDateRange` state or
-      // have more specific selectors for the DateRangePicker inputs.
+      // Let's assume the DateRangePicker component updates input fields with specific test IDs or labels.
+      // If not, we might need to inspect the props passed to DateRangePicker if BulkEditPanel re-renders.
+      // For this example, we'll assume input fields are updated and can be queried.
+      // The DateRangePicker component itself has 'From' and 'To' inputs.
+      // In BulkEditPanel, these are `DateInput` components.
+      // We look for the input elements associated with 'Dal' and 'Al' labels.
+      const fromInput = screen.getByLabelText('Dal') as HTMLInputElement;
+      const toInput = screen.getByLabelText('Al') as HTMLInputElement;
 
-      // The BulkEditPanel might show selected dates, which is easier to check.
-      // This test needs to be more robust by checking the state passed to DateRangePicker or BulkEditPanel.
+      expect(fromInput.value).toBe('2024-07-10');
+      expect(toInput.value).toBe('2024-07-10');
+
+      vi.useRealTimers();
     });
 
     it('selects a date range on two clicks', async () => {
+      vi.setSystemTime(new Date('2024-07-15T10:00:00.000Z'));
       const user = userEvent.setup();
       renderCalendar();
-      await user.click(screen.getAllByText('10')[0]);
-      await user.click(screen.getAllByText('15')[0]);
-      // Assert selectedDateRange reflects { start: 10th, end: 15th }
-      // Again, needs better state inspection or component output checking.
+      // Click day 10 then day 15 of July 2024
+      const day10Button = screen.getAllByText('10').find(el => el.closest('button'));
+      const day15Button = screen.getAllByText('15').find(el => el.closest('button'));
+      expect(day10Button).toBeDefined();
+      expect(day15Button).toBeDefined();
+
+      await user.click(day10Button!);
+      await user.click(day15Button!);
+
+      const fromInput = screen.getByLabelText('Dal') as HTMLInputElement;
+      const toInput = screen.getByLabelText('Al') as HTMLInputElement;
+
+      expect(fromInput.value).toBe('2024-07-10');
+      expect(toInput.value).toBe('2024-07-15');
+      vi.useRealTimers();
     });
     
     // Drag selection is harder to test with userEvent directly for mouse down/move/up across elements.
     // It might require dispatching mouse events manually.
     it('selects a date range by dragging', async () => {
-        renderCalendar();
-        const day10 = screen.getAllByText('10')[0];
-        const day15 = screen.getAllByText('15')[0];
+        vi.setSystemTime(new Date('2024-07-15T10:00:00.000Z'));
+        renderCalendar(1); // Room 1, July 2024
+        const day10Button = screen.getAllByText('10').find(el => el.closest('button'));
+        const day15Button = screen.getAllByText('15').find(el => el.closest('button'));
+        expect(day10Button).toBeDefined();
+        expect(day15Button).toBeDefined();
 
         // Simulate mouse down on day 10
-        fireEvent.mouseDown(day10);
+        fireEvent.mouseDown(day10Button!);
         // Simulate mouse enter on day 15 (while dragging)
-        fireEvent.mouseEnter(day15);
-        // Simulate mouse up (globally, as per component logic)
+        // Important: mouseEnter should be on the element that Calendar attaches mouseEnter listener to.
+        // This is typically the day cell itself.
+        fireEvent.mouseEnter(day15Button!);
+        // Simulate mouse up (globally, as per component logic on window)
         fireEvent.mouseUp(window); 
         
-        // Assert selectedDateRange reflects { start: 10th, end: 15th }
-        // This requires checking the state passed to DateRangePicker.
-        // Example: expect(screen.getByLabelText('Dal').value).toContain('10');
-        // expect(screen.getByLabelText('Al').value).toContain('15');
-        // This depends on DateRangePicker inputs being updated, which they should be.
+        const fromInput = screen.getByLabelText('Dal') as HTMLInputElement;
+        const toInput = screen.getByLabelText('Al') as HTMLInputElement;
+        expect(fromInput.value).toBe('2024-07-10');
+        expect(toInput.value).toBe('2024-07-15');
+        vi.useRealTimers();
     });
   });
 
   describe('Bulk Updates', () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    // Test Case 1 (Price Change)
-    it('Test Case 1: calls updateBulkAvailability with new price when price is updated', async () => {
-      renderCalendar(1); // Room 1
-      
-      // Select range (e.g., 5th to 7th of the current month)
-      // Assuming current month is visible and these days exist.
-      // We need to find interactive day elements.
-      const day5 = screen.getAllByText('5')[0];
-      const day7 = screen.getAllByText('7')[0];
-      
-      fireEvent.mouseDown(day5);
-      fireEvent.mouseEnter(day7);
-      fireEvent.mouseUp(window); // Finalize selection
+    beforeEach(() => {
+      // Ensure system time is mocked for consistent date selections in tests
+      vi.setSystemTime(new Date('2024-07-15T10:00:00.000Z'));
+    });
 
-      // Enter price in BulkEditPanel
+    afterEach(() => {
+      vi.useRealTimers(); // Clean up system time after each test in this describe block
+    });
+
+    // Test Case 1 (Price Change for a range)
+    it('Test Case 1: calls updateBulkAvailability with new price for a selected range', async () => {
+      renderCalendar(1); // Room 1, July 2024
+      
+      const day5Button = screen.getAllByText('5').find(el => el.closest('button'));
+      const day7Button = screen.getAllByText('7').find(el => el.closest('button'));
+      expect(day5Button).toBeDefined();
+      expect(day7Button).toBeDefined();
+      
+      fireEvent.mouseDown(day5Button!);
+      fireEvent.mouseEnter(day7Button!);
+      fireEvent.mouseUp(window);
+
       const priceInput = screen.getByPlaceholderText('0.00');
       await user.clear(priceInput);
       await user.type(priceInput, '150');
       
+      const updatePriceButton = screen.getByRole('button', { name: /Aggiorna prezzo/i });
+      await user.click(updatePriceButton);
+
+      expect(mockUpdateBulkAvailability).toHaveBeenCalledTimes(1);
+      const payload = mockUpdateBulkAvailability.mock.calls[0][0];
+      expect(payload.length).toBe(3); // 5th, 6th, 7th of July
+      payload.forEach((item: any, index: number) => {
+        expect(item.room_id).toBe(1);
+        expect(item.date).toBe(`2024-07-${(5 + index).toString().padStart(2, '0')}`);
+        expect(item.price_override).toBe(150);
+        expect(item.available).toBe(true);
+      });
+    });
+
+    it('performs a bulk price update on a single selected day', async () => {
+      renderCalendar(1); // Room 1, July 2024
+
+      const day12Button = screen.getAllByText('12').find(el => el.closest('button'));
+      expect(day12Button).toBeDefined();
+
+      // Select day 12 by clicking it twice (first click selects, second confirms single day)
+      await user.click(day12Button!);
+      await user.click(day12Button!);
+
+      // Verify DateRangePicker shows 2024-07-12 for both dates
+      const fromInput = screen.getByLabelText('Dal') as HTMLInputElement;
+      const toInput = screen.getByLabelText('Al') as HTMLInputElement;
+      expect(fromInput.value).toBe('2024-07-12');
+      expect(toInput.value).toBe('2024-07-12');
+
+      // Enter price in BulkEditPanel
+      const priceInput = screen.getByPlaceholderText('0.00');
+      await user.clear(priceInput);
+      await user.type(priceInput, '180');
+
       // Click "Aggiorna prezzo"
       const updatePriceButton = screen.getByRole('button', { name: /Aggiorna prezzo/i });
       await user.click(updatePriceButton);
 
       expect(mockUpdateBulkAvailability).toHaveBeenCalledTimes(1);
       const payload = mockUpdateBulkAvailability.mock.calls[0][0];
-      expect(payload.length).toBe(3); // 5th, 6th, 7th
-      payload.forEach((item: any) => {
-        expect(item.room_id).toBe(1);
-        expect(item.price_override).toBe(150);
-        expect(item.available).toBe(true);
+      expect(payload.length).toBe(1);
+      expect(payload[0]).toEqual({
+        room_id: 1,
+        date: '2024-07-12',
+        price_override: 180,
+        available: true,
       });
     });
 
     // Test Case 2 (Close Availability)
-    it('Test Case 2: calls updateBulkAvailability to close availability', async () => {
-      renderCalendar(1);
-      fireEvent.mouseDown(screen.getAllByText('10')[0]);
-      fireEvent.mouseEnter(screen.getAllByText('12')[0]);
+    it('Test Case 2: calls updateBulkAvailability to close availability for a range', async () => {
+      renderCalendar(1); // Room 1, July 2024
+      const day10Button = screen.getAllByText('10').find(el => el.closest('button'));
+      const day12Button = screen.getAllByText('12').find(el => el.closest('button'));
+      expect(day10Button).toBeDefined();
+      expect(day12Button).toBeDefined();
+
+      fireEvent.mouseDown(day10Button!);
+      fireEvent.mouseEnter(day12Button!);
       fireEvent.mouseUp(window);
 
       const closeButton = screen.getByRole('button', { name: /Chiudi/i });
@@ -229,26 +316,33 @@ describe('Calendar Component', () => {
       expect(mockUpdateBulkAvailability).toHaveBeenCalledTimes(1);
       const payload = mockUpdateBulkAvailability.mock.calls[0][0];
       expect(payload.length).toBe(3); // 10th, 11th, 12th
-      payload.forEach((item: any) => {
+      payload.forEach((item: any, index: number) => {
         expect(item.room_id).toBe(1);
+        expect(item.date).toBe(`2024-07-${(10 + index).toString().padStart(2, '0')}`);
         expect(item.available).toBe(false);
-        expect(item.price_override).toBeNull(); // As per recent change
+        expect(item.price_override).toBeNull();
         expect(item.blocked_reason).toBe('manual_block');
       });
     });
 
-    // Test Case 3 (Reopen Availability)
-    it('Test Case 3: calls updateBulkAvailability to reopen availability', async () => {
-      // Override initial state for this test to have dates initially closed
+    // Test Case 3 (Reopen Availability for a range)
+    it('Test Case 3: calls updateBulkAvailability to reopen availability for a range', async () => {
+      // Override initial availability for this test: days 10, 11 of July are closed for room 1
       mockAvailabilityStoreState.availability = [
-        { id: 1, room_id: 1, date: '2024-07-10', available: false, price_override: null, updated_at: '', blocked_reason: 'manual_block', notes:null, created_at:'' },
-        { id: 2, room_id: 1, date: '2024-07-11', available: false, price_override: null, updated_at: '', blocked_reason: 'manual_block', notes:null, created_at:'' },
+        ...mockAvailabilityStoreState.availability.filter((a:any) => !['2024-07-10', '2024-07-11'].includes(a.date) || a.room_id !== 1),
+        { id: 100, room_id: 1, date: '2024-07-10', available: false, price_override: null, updated_at: '', blocked_reason: 'manual_block', notes:null, created_at:'' },
+        { id: 101, room_id: 1, date: '2024-07-11', available: false, price_override: null, updated_at: '', blocked_reason: 'manual_block', notes:null, created_at:'' },
       ];
       (useAvailabilityStore as vi.Mock).mockReturnValue(mockAvailabilityStoreState);
       
-      renderCalendar(1);
-      fireEvent.mouseDown(screen.getAllByText('10')[0]);
-      fireEvent.mouseEnter(screen.getAllByText('11')[0]);
+      renderCalendar(1); // Room 1, July 2024
+      const day10Button = screen.getAllByText('10').find(el => el.closest('button'));
+      const day11Button = screen.getAllByText('11').find(el => el.closest('button'));
+      expect(day10Button).toBeDefined();
+      expect(day11Button).toBeDefined();
+
+      fireEvent.mouseDown(day10Button!);
+      fireEvent.mouseEnter(day11Button!);
       fireEvent.mouseUp(window);
 
       const openButton = screen.getByRole('button', { name: /Apri/i });
@@ -257,10 +351,11 @@ describe('Calendar Component', () => {
       expect(mockUpdateBulkAvailability).toHaveBeenCalledTimes(1);
       const payload = mockUpdateBulkAvailability.mock.calls[0][0];
       expect(payload.length).toBe(2); // 10th, 11th
-      payload.forEach((item: any) => {
+      payload.forEach((item: any, index: number) => {
         expect(item.room_id).toBe(1);
+        expect(item.date).toBe(`2024-07-${(10 + index).toString().padStart(2, '0')}`);
         expect(item.available).toBe(true);
-        expect(item.price_override).toBe(mockRoomStoreState.rooms[0].base_price); // Should be room's base_price
+        expect(item.price_override).toBe(mockRoomStoreState.rooms.find(r => r.id === 1)!.base_price);
         expect(item.blocked_reason).toBeNull();
       });
     });

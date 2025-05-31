@@ -108,23 +108,52 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
         let newAvailability = [...state.availability];
 
         returnedData.forEach(newItem => {
-          if (!newItem || !newItem.id || !newItem.room_id || !newItem.date) {
-            console.warn('[Store] Skipping merge for an invalid item returned by API:', newItem);
+          // Ensure newItem is not null and has basic structure
+          if (!newItem || typeof newItem.id === 'undefined' || typeof newItem.room_id === 'undefined' || typeof newItem.date === 'undefined') {
+            console.warn('[Store] Skipping merge for an invalid/incomplete item returned by API:', newItem);
             return; 
           }
+
+          const sanitizedItem: Availability = {
+            // Ensure required fields from newItem are present and spread them
+            id: newItem.id, // Assuming id is always present and correct type
+            room_id: newItem.room_id, // Assuming room_id is always present and correct type
+            date: newItem.date, // Assuming date is always present and correct type
+
+            // Sanitize 'available'
+            available: typeof newItem.available === 'boolean' ? newItem.available :
+                       (String(newItem.available).toLowerCase() === 'true' ? true :
+                       (String(newItem.available).toLowerCase() === 'false' ? false : true)), // Default to true if parsing fails
+
+            // Sanitize 'price_override'
+            price_override: (newItem.price_override === null || typeof newItem.price_override === 'number') ? newItem.price_override :
+                            (!isNaN(parseFloat(String(newItem.price_override))) ? parseFloat(String(newItem.price_override)) : null), // Default to null if parsing fails
+
+            // Sanitize 'blocked_reason' - allow null or string
+            blocked_reason: (newItem.blocked_reason === null || typeof newItem.blocked_reason === 'string') ? newItem.blocked_reason : String(newItem.blocked_reason),
+
+            // Sanitize 'notes' - allow null or string
+            notes: (newItem.notes === null || typeof newItem.notes === 'string') ? newItem.notes : String(newItem.notes),
+
+            // Keep created_at and updated_at as strings, assuming they are correctly formatted by API
+            // Fallback to current time if not a string or undefined/null
+            created_at: typeof newItem.created_at === 'string' ? newItem.created_at : (newItem.created_at ? String(newItem.created_at) : new Date().toISOString()),
+            updated_at: typeof newItem.updated_at === 'string' ? newItem.updated_at : (newItem.updated_at ? String(newItem.updated_at) : new Date().toISOString())
+          };
+
           const index = newAvailability.findIndex(
             (existingItem) =>
-              existingItem.room_id === newItem.room_id && existingItem.date === newItem.date
+              existingItem.room_id === sanitizedItem.room_id && existingItem.date === sanitizedItem.date
           );
 
           if (index !== -1) {
             // Update existing item
-            console.log(`[Store] Merging: Updating existing item for date ${newItem.date}, room ${newItem.room_id}.`);
-            newAvailability[index] = { ...newAvailability[index], ...newItem };
+            console.log(`[Store] Merging: Updating existing item for date ${sanitizedItem.date}, room ${sanitizedItem.room_id}.`);
+            newAvailability[index] = { ...newAvailability[index], ...sanitizedItem };
           } else {
             // Add new item
-            console.log(`[Store] Merging: Adding new item for date ${newItem.date}, room ${newItem.room_id}.`);
-            newAvailability.push(newItem as Availability);
+            console.log(`[Store] Merging: Adding new item for date ${sanitizedItem.date}, room ${sanitizedItem.room_id}.`);
+            newAvailability.push(sanitizedItem);
           }
         });
         
