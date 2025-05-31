@@ -1,9 +1,7 @@
-import Stripe from 'stripe';
+import { loadStripe } from '@stripe/stripe-js';
 
-if (!import.meta.env.VITE_STRIPE_SECRET_KEY) {
-  throw new Error('Missing Stripe secret key');
+if (!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) {
+  throw new Error('Missing Stripe publishable key');
 }
 
-export const stripe = new Stripe(import.meta.env.VITE_STRIPE_SECRET_KEY, {
-  apiVersion: '2023-10-16',
-});
+export const stripe = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
