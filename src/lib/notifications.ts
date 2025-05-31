@@ -1,6 +1,8 @@
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import type { Booking } from '../types';
+import { supabase } from './supabase';
+import type { Database, Json } from './database.types';
 
 class NotificationService {
   private RESEND_API_KEY = import.meta.env.VITE_RESEND_API_KEY;
@@ -24,15 +26,27 @@ class NotificationService {
       message = `🚨 PRENOTAZIONE DOPPIA! ${booking.guest_name} dal ${checkIn} al ${checkOut} - ENTRAMBE LE STANZE - Tel: ${booking.guest_phone} - BLOCCA SUBITO SU TUTTE LE OTA!`;
     }
 
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${this.WHATSAPP_PHONE}&text=${encodeURIComponent(message)}&apikey=${this.WHATSAPP_API_KEY}`;
+    const payload: Json = {
+      recipientPhone: this.WHATSAPP_PHONE, // Assuming owner's phone for now
+      message: message,
+      bookingId: booking.id,
+    };
 
     try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to send WhatsApp notification');
+      const { error } = await supabase.from('notification_queue').insert({
+        booking_id: booking.id,
+        type: 'whatsapp',
+        status: 'pending',
+        payload: payload,
+        attempts: 0,
+      } as Database['public']['Tables']['notification_queue']['Insert']);
+
+      if (error) {
+        throw error;
       }
     } catch (error) {
-      console.error('WhatsApp notification error:', error);
+      console.error('Error queueing WhatsApp notification:', error);
+      // Decide if you want to re-throw or handle gracefully
       throw error;
     }
   }
@@ -87,26 +101,28 @@ class NotificationService {
       </table>
     `;
 
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.RESEND_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: 'Room in Bloom <info@roominbloom.it>',
-          to: 'info.roominbloom@gmail.com',
-          subject: `Nuova Prenotazione #${booking.id}`,
-          html: emailHtml
-        })
-      });
+    const payload: Json = {
+      to: 'info.roominbloom@gmail.com', // Assuming owner's email
+      subject: `Nuova Prenotazione #${booking.id}`,
+      htmlContent: emailHtml,
+      bookingId: booking.id,
+    };
 
-      if (!response.ok) {
-        throw new Error('Failed to send email notification');
+    try {
+      const { error } = await supabase.from('notification_queue').insert({
+        booking_id: booking.id,
+        type: 'email',
+        status: 'pending',
+        payload: payload,
+        attempts: 0,
+      } as Database['public']['Tables']['notification_queue']['Insert']);
+
+      if (error) {
+        throw error;
       }
     } catch (error) {
-      console.error('Email notification error:', error);
+      console.error('Error queueing email notification:', error);
+      // Decide if you want to re-throw or handle gracefully
       throw error;
     }
   }

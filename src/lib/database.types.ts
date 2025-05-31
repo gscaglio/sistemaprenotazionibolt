@@ -132,6 +132,47 @@ export interface Database {
           updated_at?: string
         }
       }
+      notification_queue: {
+        Row: {
+          id: number
+          booking_id: number | null
+          type: "whatsapp" | "email"
+          status: "pending" | "processing" | "sent" | "failed"
+          attempts: number
+          last_attempt: string | null
+          next_retry: string | null
+          error_message: string | null
+          payload: Json
+          created_at: string
+          sent_at: string | null
+        }
+        Insert: {
+          id?: number
+          booking_id?: number | null
+          type: "whatsapp" | "email"
+          status?: "pending" | "processing" | "sent" | "failed"
+          attempts?: number
+          last_attempt?: string | null
+          next_retry?: string | null
+          error_message?: string | null
+          payload: Json
+          created_at?: string
+          sent_at?: string | null
+        }
+        Update: {
+          id?: number
+          booking_id?: number | null
+          type?: "whatsapp" | "email"
+          status?: "pending" | "processing" | "sent" | "failed"
+          attempts?: number
+          last_attempt?: string | null
+          next_retry?: string | null
+          error_message?: string | null
+          payload?: Json
+          created_at?: string
+          sent_at?: string | null
+        }
+      }
       settings: {
         Row: {
           key: string
