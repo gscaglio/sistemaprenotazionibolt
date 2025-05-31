@@ -215,10 +215,22 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
 
   const handleMouseEnter = (day: Date) => {
     if (isDragging && selectedDateRange.start && !isAfter(day, MAX_DATE)) {
-      setSelectedDateRange(prev => ({
-        start: prev.start,
-        end: day
-      }));
+      // If hovering over the start day and no end day is yet defined by dragging,
+      // (i.e., end is null), do nothing. Let the second click on handleDateClick
+      // define the single day selection.
+      if (selectedDateRange.end === null && isSameDay(selectedDateRange.start, day)) {
+        return;
+      }
+
+      setSelectedDateRange(prev => {
+        // Optimization: if end is already this day, don't cause a new state update.
+        // This also handles the case where end was null and is now being set to day.
+        if (prev.end && isSameDay(prev.end, day)) {
+          return prev;
+        }
+        // If end was not null and different from day, or if end was null, update end to day.
+        return { start: prev.start, end: day };
+      });
     }
   };
 
