@@ -2,7 +2,7 @@
 DO $$ 
 BEGIN
     EXECUTE (
-        SELECT string_agg('DROP POLICY IF EXISTS "' || polname || '" ON error_logs;', E'\n')
+        SELECT string_agg('DROP POLICY IF EXISTS "' || policyname || '" ON error_logs;', E'\n')
         FROM pg_policies 
         WHERE tablename = 'error_logs'
     );
