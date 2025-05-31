@@ -39,6 +39,32 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
       const monthStart = format(startOfMonth(parse(month, 'yyyy-MM', new Date())), 'yyyy-MM-dd');
       const monthEnd = format(endOfMonth(parse(month, 'yyyy-MM', new Date())), 'yyyy-MM-dd');
       
+      const sanitizedFetchedData: Availability[] = [];
+      if (data && Array.isArray(data)) {
+        data.forEach(item => {
+          if (!item || typeof item.id === 'undefined' || typeof item.room_id === 'undefined' || typeof item.date === 'undefined') {
+            console.warn('[Store] fetchAvailability: Skipping merge for an invalid/incomplete item returned by API:', item);
+            return;
+          }
+
+          const sanitizedItem: Availability = {
+            id: item.id,
+            room_id: item.room_id,
+            date: item.date,
+            available: typeof item.available === 'boolean' ? item.available :
+                       (String(item.available).toLowerCase() === 'true' ? true :
+                       (String(item.available).toLowerCase() === 'false' ? false : false)), // Defaulting to false
+            price_override: (item.price_override === null || typeof item.price_override === 'number') ? item.price_override :
+                            (!isNaN(parseFloat(String(item.price_override))) ? parseFloat(String(item.price_override)) : null),
+            blocked_reason: (item.blocked_reason === null || typeof item.blocked_reason === 'string') ? item.blocked_reason : String(item.blocked_reason),
+            notes: (item.notes === null || typeof item.notes === 'string') ? item.notes : String(item.notes),
+            created_at: typeof item.created_at === 'string' ? item.created_at : (item.created_at ? String(item.created_at) : new Date().toISOString()),
+            updated_at: typeof item.updated_at === 'string' ? item.updated_at : (item.updated_at ? String(item.updated_at) : new Date().toISOString())
+          };
+          sanitizedFetchedData.push(sanitizedItem);
+        });
+      }
+
       set(state => {
         // Remove existing data for this month
         const filteredAvailability = state.availability.filter(item => {
@@ -47,10 +73,10 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
         });
         
         // Merge new data with existing data from other months
-        const newAvailability = [...filteredAvailability, ...(data || [])];
+        const newAvailability = [...filteredAvailability, ...sanitizedFetchedData];
         
         console.log(`[Store] Successfully merged availability data. Total records: ${newAvailability.length}`);
-        console.log(`[Store] Records for current month: ${data?.length || 0}`);
+        console.log(`[Store] Records for current month: ${sanitizedFetchedData.length}`);
         console.log(`[Store] Records for other months: ${filteredAvailability.length}`);
         
         return {

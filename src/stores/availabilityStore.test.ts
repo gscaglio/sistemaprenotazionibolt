@@ -103,6 +103,81 @@ describe('useAvailabilityStore', () => {
       expect(useAvailabilityStore.getState().loading).toBe(false);
       expect(useAvailabilityStore.getState().availability).toEqual([]);
     });
+
+    it('should sanitize data fetched by fetchAvailability before storing', async () => {
+      const mockMonth = '2024-07';
+      const rawApiData = [
+        // Valid item
+        { id: 1, room_id: 1, date: '2024-07-01', available: true, price_override: 100, notes: 'Note 1', blocked_reason: null, created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z' },
+        // Item with string "true" for available
+        { id: 2, room_id: 1, date: '2024-07-02', available: "true", price_override: 110, notes: 'Note 2', blocked_reason: null, created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z' },
+        // Item with string "false" for available
+        { id: 3, room_id: 1, date: '2024-07-03', available: "false", price_override: null, notes: 'Note 3', blocked_reason: 'Reason', created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z' },
+        // Item with unparsable string for available ("maybe" -> should default to false)
+        { id: 4, room_id: 1, date: '2024-07-04', available: "maybe", price_override: 120, notes: 'Note 4', blocked_reason: null, created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z' },
+        // Item with string number for price_override
+        { id: 5, room_id: 1, date: '2024-07-05', available: true, price_override: "150", notes: 'Note 5', blocked_reason: null, created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z' },
+        // Item with non-numeric string for price_override ("invalid_price" -> should default to null)
+        { id: 6, room_id: 1, date: '2024-07-06', available: false, price_override: "invalid_price", notes: 'Note 6', blocked_reason: null, created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z' },
+        // Item with boolean false for available
+        { id: 7, room_id: 1, date: '2024-07-07', available: false, price_override: 160, notes: 'Note 7', blocked_reason: null, created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z' },
+         // Item missing some optional fields (should get defaults for created_at/updated_at if not string)
+        { id: 8, room_id: 1, date: '2024-07-08', available: true, price_override: 170, notes: null, blocked_reason: null, created_at: null, updated_at: undefined },
+      ];
+
+      // Since fetchAvailability uses supabase client directly in the current store implementation:
+      const fromMock = supabase.from as vi.Mock;
+      const orderMock = vi.fn().mockResolvedValue({ data: rawApiData, error: null });
+      fromMock.mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        gte: vi.fn().mockReturnThis(),
+        lte: vi.fn().mockReturnThis(),
+        order: orderMock,
+      });
+
+      await useAvailabilityStore.getState().fetchAvailability(mockMonth);
+
+      const { availability, loading, error } = useAvailabilityStore.getState();
+
+      expect(loading).toBe(false);
+      expect(error).toBe(null);
+      expect(availability.length).toBe(rawApiData.length);
+
+      // Assertions for each item
+      const item1 = availability.find(a => a.id === 1);
+      expect(item1?.available).toBe(true);
+      expect(item1?.price_override).toBe(100);
+
+      const item2 = availability.find(a => a.id === 2);
+      expect(item2?.available).toBe(true); // "true" string -> true boolean
+      expect(item2?.price_override).toBe(110);
+
+      const item3 = availability.find(a => a.id === 3);
+      expect(item3?.available).toBe(false); // "false" string -> false boolean
+      expect(item3?.price_override).toBe(null);
+
+      const item4 = availability.find(a => a.id === 4);
+      expect(item4?.available).toBe(false); // "maybe" string -> false boolean (default for unparsable)
+      expect(item4?.price_override).toBe(120);
+
+      const item5 = availability.find(a => a.id === 5);
+      expect(item5?.available).toBe(true);
+      expect(item5?.price_override).toBe(150); // "150" string -> 150 number
+
+      const item6 = availability.find(a => a.id === 6);
+      expect(item6?.available).toBe(false);
+      expect(item6?.price_override).toBe(null); // "invalid_price" string -> null
+
+      const item7 = availability.find(a => a.id === 7);
+      expect(item7?.available).toBe(false); // boolean false
+      expect(item7?.price_override).toBe(160);
+
+      const item8 = availability.find(a => a.id === 8);
+      expect(item8?.available).toBe(true);
+      expect(item8?.price_override).toBe(170);
+      expect(typeof item8?.created_at).toBe('string'); // Should default to new Date().toISOString()
+      expect(typeof item8?.updated_at).toBe('string'); // Should default to new Date().toISOString()
+    });
   });
 
   describe('updateBulkAvailability', () => {
