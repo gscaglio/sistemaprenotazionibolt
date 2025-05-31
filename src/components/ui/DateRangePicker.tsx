@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { format, isAfter, addMonths } from 'date-fns';
 import { dateRangeSchema } from '../../lib/validations';
+import { MAX_MONTHS } from '../../lib/constants';
 
-// Define MAX_MONTHS and MAX_DATE here as per plan
-const MAX_MONTHS = 16;
 const MAX_DATE = addMonths(new Date(), MAX_MONTHS);
 
 export interface DateRangePickerProps {

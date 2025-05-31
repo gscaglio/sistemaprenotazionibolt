@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore, isAfter, addDays } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { priceSchema } from '../../lib/validations';
+import { MAX_MONTHS } from '../../lib/constants';
 import toast from 'react-hot-toast';
 import { DateRangePicker } from './DateRangePicker';
 import { BulkEditPanel } from './BulkEditPanel';
@@ -22,7 +23,6 @@ interface CalendarProps {
   currentRoomId?: number;
 }
 
-const MAX_MONTHS = 16;
 const MAX_DATE = addMonths(new Date(), MAX_MONTHS);
 
 export function Calendar({ mode = 'single', selectedDates = [], onSelect, className, currentRoomId }: CalendarProps) {
