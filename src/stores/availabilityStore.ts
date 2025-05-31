@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import * as Sentry from "@sentry/react";
 import type { Database } from '../lib/database.types';
 import { availabilityApi } from '../lib/api/availability';
 import { startOfMonth, endOfMonth, parse, format } from 'date-fns';
@@ -29,29 +30,36 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
   loading: false,
   error: null,
   fetchAvailability: async (month) => {
-    console.log(`[Store] Fetching availability for month: ${month}`);
+    const transaction = Sentry.startTransaction({
+      name: "fetchAvailability",
+      op: "store.fetch",
+    });
+
+    Sentry.configureScope(scope => {
+      scope.setTag("month", month);
+    });
+
     set(state => ({ loading: true, error: null }));
     
     try {
       const data = await availabilityApi.getAvailability(month);
       
-      // Get the date range for the month being fetched
       const monthStart = format(startOfMonth(parse(month, 'yyyy-MM', new Date())), 'yyyy-MM-dd');
       const monthEnd = format(endOfMonth(parse(month, 'yyyy-MM', new Date())), 'yyyy-MM-dd');
       
       set(state => {
-        // Remove existing data for this month
         const filteredAvailability = state.availability.filter(item => {
           const itemDate = item.date;
           return itemDate < monthStart || itemDate > monthEnd;
         });
         
-        // Merge new data with existing data from other months
         const newAvailability = [...filteredAvailability, ...(data || [])];
         
-        console.log(`[Store] Successfully merged availability data. Total records: ${newAvailability.length}`);
-        console.log(`[Store] Records for current month: ${data?.length || 0}`);
-        console.log(`[Store] Records for other months: ${filteredAvailability.length}`);
+        Sentry.addBreadcrumb({
+          category: 'store',
+          message: `Merged availability data. Total: ${newAvailability.length}, Current month: ${data?.length || 0}, Other months: ${filteredAvailability.length}`,
+          level: 'info'
+        });
         
         return {
           availability: newAvailability,
@@ -60,17 +68,32 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
         };
       });
     } catch (error) {
-      console.error(`[Store] Error fetching availability for month ${month}:`, error);
-      set({ error: (error as Error).message, loading: false });
+      const sentryError = error instanceof Error ? error : new Error(String(error));
+      Sentry.captureException(sentryError, {
+        tags: { operation: 'fetchAvailability', month }
+      });
+      set({ error: sentryError.message, loading: false });
+    } finally {
+      transaction.finish();
     }
   },
   updateAvailability: async (id, updates) => {
-    console.log(`[Store] Updating availability for id: ${id} with updates:`, updates);
+    const transaction = Sentry.startTransaction({
+      name: "updateAvailability",
+      op: "store.update",
+    });
+
     set({ loading: true, error: null });
     try {
       const data = await availabilityApi.updateAvailability(id, updates);
       
-      console.log(`[Store] Successfully updated availability for id: ${id}`);
+      Sentry.addBreadcrumb({
+        category: 'store',
+        message: `Updated availability for id: ${id}`,
+        level: 'info',
+        data: { updates }
+      });
+
       set((state) => ({
         availability: state.availability.map((item) =>
           item.id === id ? { ...item, ...data } : item
@@ -78,67 +101,120 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
         loading: false,
       }));
     } catch (error) {
-      console.error(`[Store] Error updating availability for id: ${id}:`, error);
-      set({ error: (error as Error).message, loading: false });
+      const sentryError = error instanceof Error ? error : new Error(String(error));
+      Sentry.captureException(sentryError, {
+        tags: { operation: 'updateAvailability', id: String(id) }
+      });
+      set({ error: sentryError.message, loading: false });
+    } finally {
+      transaction.finish();
     }
   },
   updateBulkAvailability: async (updates: AvailabilityUpdate[]) => {
-    console.log('[Store] Initiating bulk update of availability. Number of updates:', updates.length, 'Sample:', logSample(updates));
+    const transaction = Sentry.startTransaction({
+      name: "updateBulkAvailability",
+      op: "store.bulkUpdate",
+    });
+
     if (!updates || updates.length === 0) {
-      console.warn('[Store] updateBulkAvailability called with no updates.');
+      Sentry.captureMessage('updateBulkAvailability called with no updates', 'warning');
       set({ loading: false });
+      transaction.finish();
       return;
     }
+
     set({ loading: true, error: null });
     try {
-      console.log(`[Store] Calling API for bulk update with ${updates.length} updates.`);
+      Sentry.addBreadcrumb({
+        category: 'store',
+        message: `Starting bulk update with ${updates.length} updates`,
+        level: 'info',
+        data: { sample: logSample(updates) }
+      });
+
       const returnedData = await availabilityApi.bulkUpdateAvailability(updates);
       
       if (!returnedData) {
-        console.warn('[Store] API call for bulk update returned undefined data. No store update will be performed.');
+        Sentry.captureMessage('Bulk update API returned undefined data', 'warning');
         set({ loading: false });
         return;
       }
-      
-      console.log(`[Store] API call for bulk update successful. Received ${returnedData.length} records. Merging now.`);
-      console.log('[Store] Sample of returned data for merge:', logSample(returnedData));
 
       set((state) => {
-        // Create a mutable copy of the current availability for modification
         let newAvailability = [...state.availability];
+        let sanitizationIssues = [];
 
         returnedData.forEach(newItem => {
           if (!newItem || !newItem.id || !newItem.room_id || !newItem.date) {
-            console.warn('[Store] Skipping merge for an invalid item returned by API:', newItem);
-            return; 
+            sanitizationIssues.push({
+              issue: 'Invalid item structure',
+              item: newItem
+            });
+            return;
           }
+
+          // Price override sanitization
+          if (newItem.price_override !== null && typeof newItem.price_override !== 'number') {
+            const originalPrice = newItem.price_override;
+            newItem.price_override = parseFloat(String(newItem.price_override));
+            if (isNaN(newItem.price_override)) {
+              newItem.price_override = null;
+              sanitizationIssues.push({
+                issue: 'Invalid price_override',
+                itemId: newItem.id,
+                originalValue: originalPrice
+              });
+            }
+          }
+
+          // Available field sanitization
+          if (typeof newItem.available !== 'boolean') {
+            const originalValue = newItem.available;
+            newItem.available = String(newItem.available).toLowerCase() === 'true';
+            sanitizationIssues.push({
+              issue: 'Non-boolean available field',
+              itemId: newItem.id,
+              originalValue
+            });
+          }
+
           const index = newAvailability.findIndex(
             (existingItem) =>
               existingItem.room_id === newItem.room_id && existingItem.date === newItem.date
           );
 
           if (index !== -1) {
-            // Update existing item
-            console.log(`[Store] Merging: Updating existing item for date ${newItem.date}, room ${newItem.room_id}.`);
             newAvailability[index] = { ...newAvailability[index], ...newItem };
           } else {
-            // Add new item
-            console.log(`[Store] Merging: Adding new item for date ${newItem.date}, room ${newItem.room_id}.`);
             newAvailability.push(newItem as Availability);
           }
         });
-        
-        console.log('[Store] Merging complete. New availability sample:', logSample(newAvailability));
-        console.log('[Store] Total items in availability after merge:', newAvailability.length);
+
+        if (sanitizationIssues.length > 0) {
+          Sentry.captureMessage('Data sanitization applied during bulk update', {
+            level: 'warning',
+            extra: { sanitizationIssues }
+          });
+        }
+
+        Sentry.addBreadcrumb({
+          category: 'store',
+          message: `Bulk update completed. Total items: ${newAvailability.length}`,
+          level: 'info'
+        });
 
         return { availability: newAvailability, loading: false };
       });
 
-      console.log('[Store] Bulk update process and store merge completed successfully.');
-
     } catch (error) {
-      console.error('[Store] Error during bulk availability update or merge process:', error);
-      set({ error: (error as Error).message, loading: false });
+      const sentryError = error instanceof Error ? error : new Error(String(error));
+      Sentry.captureException(sentryError, {
+        tags: { operation: 'updateBulkAvailability' },
+        extra: { updates: logSample(updates) }
+      });
+      set({ error: sentryError.message, loading: false });
+    } finally {
+      transaction.finish();
     }
   },
 }));
