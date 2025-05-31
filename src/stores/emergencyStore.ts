@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { availabilityApi } from '../lib/api/availability';
 import { format } from 'date-fns';
+import { supabase } from '../lib/supabase';
+import { errorLogger } from '../lib/errorLogger';
 
 interface EmergencyState {
   isEmergencyActive: boolean;
@@ -16,46 +18,54 @@ export const useEmergencyStore = create<EmergencyState>()(
       isEmergencyActive: false,
       savedAvailability: null,
       activateEmergency: async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not authenticated');
+
         try {
-          const currentDate = new Date();
-          const month = format(currentDate, 'yyyy-MM');
-          const availability = await availabilityApi.getAvailability(month);
-          
-          set({ savedAvailability: availability, isEmergencyActive: true });
-          
-          const updates = availability.map(item => ({
-            room_id: item.room_id,
-            date: item.date,
-            available: false,
-            blocked_reason: 'emergency',
-            price_override: null
-          }));
-          
-          await availabilityApi.bulkUpdateAvailability(updates);
+          // Start transaction for emergency mode activation
+          const { data: result, error } = await supabase.rpc('activate_emergency_mode', {
+            p_user_id: user.id
+          });
+
+          if (error) throw error;
+
+          set({ 
+            savedAvailability: result.saved_availability, 
+            isEmergencyActive: true 
+          });
         } catch (error) {
-          console.error('Failed to activate emergency mode:', error);
+          errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+            operation: 'activateEmergency',
+            userId: user.id
+          });
           throw error;
         }
       },
       deactivateEmergency: async () => {
-        const { savedAvailability } = get();
-        if (savedAvailability) {
-          try {
-            // Ripristina lo stato precedente
-            await availabilityApi.bulkUpdateAvailability(savedAvailability);
-            
-            // Forza un aggiornamento dei dati dopo il ripristino
-            const currentDate = new Date();
-            const month = format(currentDate, 'yyyy-MM');
-            await availabilityApi.getAvailability(month);
-            
-            set({ isEmergencyActive: false, savedAvailability: null });
-          } catch (error) {
-            console.error('Failed to deactivate emergency mode:', error);
-            throw error;
-          }
-        } else {
-          set({ isEmergencyActive: false });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not authenticated');
+
+        try {
+          // Start transaction for emergency mode deactivation
+          const { error } = await supabase.rpc('deactivate_emergency_mode', {
+            p_user_id: user.id,
+            p_saved_availability: get().savedAvailability
+          });
+
+          if (error) throw error;
+
+          // Force a refresh of availability data
+          const currentDate = new Date();
+          const month = format(currentDate, 'yyyy-MM');
+          await availabilityApi.getAvailability(month);
+
+          set({ isEmergencyActive: false, savedAvailability: null });
+        } catch (error) {
+          errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+            operation: 'deactivateEmergency',
+            userId: user.id
+          });
+          throw error;
         }
       }
     }),

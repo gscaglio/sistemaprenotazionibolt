@@ -67,44 +67,18 @@ export const availabilityApi = {
       }
 
       try {
-        const firstUpdate = updates[0];
-        if (firstUpdate?.room_id && firstUpdate.date) {
-          const roomId = firstUpdate.room_id;
-          const dates = updates.map(u => u.date).filter(d => d !== undefined) as string[];
-          
-          if (roomId && dates.length > 0) {
-            const { data: existingRecords, error: fetchError } = await supabase
-              .from('availability')
-              .select('id, date, room_id, price_override, available')
-              .eq('room_id', roomId)
-              .in('date', dates);
-
-            if (fetchError) {
-              errorLogger.log(new Error(fetchError.message), 'warning', {
-                operation: 'bulkUpdateAvailability_prefetch',
-                roomId,
-                dates
-              });
-            }
-          }
-        }
-        
-        const upsertData = updates.map(update => ({
-          ...update,
-          updated_at: new Date().toISOString() 
-        }));
-
+        // Call the RPC function with transaction support
         const { data, error } = await supabase
-          .from('availability')
-          .upsert(upsertData, {
-            onConflict: 'room_id,date',
-            ignoreDuplicates: false
-          })
-          .select();
+          .rpc('bulk_update_availability_with_transaction', {
+            updates: updates.map(update => ({
+              ...update,
+              updated_at: new Date().toISOString()
+            }))
+          });
 
         if (error) {
           errorLogger.log(new Error(error.message), 'error', {
-            operation: 'bulkUpdateAvailability_upsert',
+            operation: 'bulkUpdateAvailability_rpc',
             code: error.code,
             details: error.details,
             hint: error.hint,
