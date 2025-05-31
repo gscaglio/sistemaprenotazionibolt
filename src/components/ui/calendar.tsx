@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isTomorrow, isWithinInterval, isBefore, isAfter, addDays } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -6,13 +6,13 @@ import { cn } from '../../lib/utils';
 import { useAvailabilityStore } from '../../stores/availabilityStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { priceSchema } from '../../lib/validations';
+import { performanceLogger } from '../../lib/performanceLogger';
 import { MAX_MONTHS } from '../../lib/constants';
 import toast from 'react-hot-toast';
 import { DateRangePicker } from './DateRangePicker';
 import { BulkEditPanel } from './BulkEditPanel';
 import type { Database } from '../../lib/database.types';
 
-// Define RoomType alias
 type RoomType = Database['public']['Tables']['rooms']['Row'];
 
 interface CalendarProps {
@@ -44,7 +44,6 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     error: storeError 
   } = useAvailabilityStore();
 
-  // Initialize visible months and fetch availability for all months
   useEffect(() => {
     const initialMonths = [];
     const today = new Date();
@@ -53,11 +52,10 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
     }
     setVisibleMonths(initialMonths);
 
-    // Fetch availability for all months
     initialMonths.forEach(month => {
       fetchAvailability(format(month, 'yyyy-MM'));
     });
-  }, [fetchAvailability]); // Add fetchAvailability to dependencies
+  }, [fetchAvailability]);
 
   useEffect(() => {
     if (storeError) {
@@ -326,123 +324,125 @@ export function Calendar({ mode = 'single', selectedDates = [], onSelect, classN
   };
 
   const renderMonth = (month: Date, room: RoomType) => {
-    if (currentRoomId && room.id !== currentRoomId) return null;
+    return performanceLogger.measureSync('renderCalendarMonth', () => {
+      if (currentRoomId && room.id !== currentRoomId) return null;
 
-    const monthStart = startOfMonth(month);
-    const monthEnd = endOfMonth(month);
-    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+      const monthStart = startOfMonth(month);
+      const monthEnd = endOfMonth(month);
+      const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-    return (
-      <div key={format(month, 'yyyy-MM')} className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">
-            {format(month, 'MMMM yyyy', { locale: it })}
-          </h3>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => handleScroll('prev')}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              disabled={isBefore(subMonths(month, 1), new Date())}
-              aria-label="Mese precedente"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => handleScroll('next')}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              disabled={isAfter(addMonths(month, 1), MAX_DATE)}
-              aria-label="Mese successivo"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
+      return (
+        <div key={format(month, 'yyyy-MM')} className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {format(month, 'MMMM yyyy', { locale: it })}
+            </h3>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => handleScroll('prev')}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                disabled={isBefore(subMonths(month, 1), new Date())}
+                aria-label="Mese precedente"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => handleScroll('next')}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                disabled={isAfter(addMonths(month, 1), MAX_DATE)}
+                aria-label="Mese successivo"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-7 gap-1 mb-4">
+            {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((day) => (
+              <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+                {day}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {Array.from({ length: monthStart.getDay() - 1 }).map((_, index) =>
+              <div key={`empty-${index}`} className="min-h-[60px]" />
+            )}
+            {days.map(day => {
+              const dayInfo = getAvailabilityInfo(day, room.id);
+              const isSelected = selectedDateRange.start && 
+                (selectedDateRange.end 
+                  ? isWithinInterval(day, {
+                      start: new Date(Math.min(selectedDateRange.start.getTime(), selectedDateRange.end.getTime())),
+                      end: new Date(Math.max(selectedDateRange.start.getTime(), selectedDateRange.end.getTime()))
+                    })
+                  : isSameDay(day, selectedDateRange.start));
+              
+              const isCurrentDay = isToday(day);
+              const isNextDay = isTomorrow(day);
+              const isFutureDate = isAfter(day, MAX_DATE);
+
+              let dayStyle = 'bg-gray-100 cursor-not-allowed opacity-50';
+
+              if (!isFutureDate) {
+                if (dayInfo.isAvailable) {
+                  if (dayInfo.hasPriceOverride) {
+                    dayStyle = 'bg-green-200 hover:bg-green-300 border border-green-400';
+                  } else {
+                    dayStyle = 'bg-green-100 hover:bg-green-200';
+                  }
+                } else {
+                  dayStyle = 'bg-red-100 hover:bg-red-200';
+                }
+              }
+
+              if (isSelected) {
+                dayStyle = isFutureDate ? dayStyle : 'bg-gray-300 hover:bg-gray-400';
+              }
+
+              return (
+                <div
+                  key={day.toString()}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    if (!isFutureDate) {
+                      handleDateClick(day, room.id);
+                      setIsDragging(true);
+                    }
+                  }}
+                  onMouseEnter={() => {
+                    if (!isFutureDate) {
+                      handleMouseEnter(day);
+                    }
+                  }}
+                  className={cn(
+                    'min-h-[60px] p-2 rounded-lg text-sm transition-all relative cursor-pointer select-none',
+                    isCurrentDay && 'ring-2 ring-blue-600',
+                    isNextDay && 'ring-1 ring-blue-400',
+                    dayStyle
+                  )}
+                >
+                  <div className="flex flex-col h-full">
+                    <span className={cn(
+                      "block font-medium mb-1",
+                      isCurrentDay && "text-gray-900",
+                      isNextDay && "text-gray-800",
+                      isFutureDate && "text-gray-400"
+                    )}>
+                      {format(day, 'd')}
+                    </span>
+                    {!isFutureDate && (
+                      <span className="text-xs font-medium text-gray-700">
+                        €{dayInfo.displayPrice}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-        <div className="grid grid-cols-7 gap-1 mb-4">
-          {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((day) => (
-            <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
-              {day}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: monthStart.getDay() - 1 }).map((_, index) =>
-            <div key={`empty-${index}`} className="min-h-[60px]" />
-          )}
-          {days.map(day => {
-            const dayInfo = getAvailabilityInfo(day, room.id);
-            const isSelected = selectedDateRange.start && 
-              (selectedDateRange.end 
-                ? isWithinInterval(day, {
-                    start: new Date(Math.min(selectedDateRange.start.getTime(), selectedDateRange.end.getTime())),
-                    end: new Date(Math.max(selectedDateRange.start.getTime(), selectedDateRange.end.getTime()))
-                  })
-                : isSameDay(day, selectedDateRange.start));
-            
-            const isCurrentDay = isToday(day);
-            const isNextDay = isTomorrow(day);
-            const isFutureDate = isAfter(day, MAX_DATE);
-
-            let dayStyle = 'bg-gray-100 cursor-not-allowed opacity-50';
-
-            if (!isFutureDate) {
-              if (dayInfo.isAvailable) {
-                if (dayInfo.hasPriceOverride) {
-                  dayStyle = 'bg-green-200 hover:bg-green-300 border border-green-400';
-                } else {
-                  dayStyle = 'bg-green-100 hover:bg-green-200';
-                }
-              } else {
-                dayStyle = 'bg-red-100 hover:bg-red-200';
-              }
-            }
-
-            if (isSelected) {
-              dayStyle = isFutureDate ? dayStyle : 'bg-gray-300 hover:bg-gray-400';
-            }
-
-            return (
-              <div
-                key={day.toString()}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  if (!isFutureDate) {
-                    handleDateClick(day, room.id);
-                    setIsDragging(true);
-                  }
-                }}
-                onMouseEnter={() => {
-                  if (!isFutureDate) {
-                    handleMouseEnter(day);
-                  }
-                }}
-                className={cn(
-                  'min-h-[60px] p-2 rounded-lg text-sm transition-all relative cursor-pointer select-none',
-                  isCurrentDay && 'ring-2 ring-blue-600',
-                  isNextDay && 'ring-1 ring-blue-400',
-                  dayStyle
-                )}
-              >
-                <div className="flex flex-col h-full">
-                  <span className={cn(
-                    "block font-medium mb-1",
-                    isCurrentDay && "text-gray-900",
-                    isNextDay && "text-gray-800",
-                    isFutureDate && "text-gray-400"
-                  )}>
-                    {format(day, 'd')}
-                  </span>
-                  {!isFutureDate && (
-                    <span className="text-xs font-medium text-gray-700">
-                      €{dayInfo.displayPrice}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+      );
+    }, { month: format(month, 'yyyy-MM'), roomId: room.id });
   };
 
   return (
