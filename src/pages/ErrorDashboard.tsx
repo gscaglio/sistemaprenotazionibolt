@@ -3,7 +3,7 @@ import { format, subDays, isToday, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { supabase } from '../lib/supabase';
 import type { ErrorLog } from '../types';
-import { BarChart, Calendar, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { BarChart, Calendar, AlertTriangle, CheckCircle, XCircle, ClipboardCopy } from 'lucide-react';
 
 function ErrorDashboard() {
   const [errors, setErrors] = useState<ErrorLog[]>([]);
@@ -19,6 +19,7 @@ function ErrorDashboard() {
     resolved: 0,
     today: 0
   });
+  const [copiedErrorId, setCopiedErrorId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchErrors();
@@ -86,6 +87,28 @@ function ErrorDashboard() {
     if (!error) {
       fetchErrors();
     }
+  };
+
+  const copyErrorToClipboard = (error: ErrorLog) => {
+    let errorString = `Error Message: ${error.message}\n`;
+    errorString += `Level: ${error.level}\n`;
+    errorString += `Timestamp: ${format(parseISO(error.created_at!), 'dd/MM/yyyy HH:mm:ss', { locale: it })}\n`;
+
+    if (error.error_stack) {
+      errorString += `Stack Trace:\n${error.error_stack}\n`;
+    }
+
+    if (error.context) {
+      errorString += `Context:\n${JSON.stringify(error.context, null, 2)}\n`;
+    }
+
+    navigator.clipboard.writeText(errorString).then(() => {
+      setCopiedErrorId(error.id!);
+      setTimeout(() => setCopiedErrorId(null), 2000);
+    }).catch(err => {
+      console.error('Failed to copy error log: ', err);
+      // Potentially set an error state here for feedback
+    });
   };
 
   return (
@@ -210,17 +233,29 @@ function ErrorDashboard() {
                     </details>
                   )}
                 </div>
-                {!error.resolved_at && (
+                <div className="flex items-center">
+                  {!error.resolved_at && (
+                    <button
+                      onClick={() => {
+                        const notes = prompt('Note di risoluzione:');
+                        if (notes) markAsResolved(error.id!, notes);
+                      }}
+                      className="ml-4 inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                    >
+                      Risolto
+                    </button>
+                  )}
                   <button
-                    onClick={() => {
-                      const notes = prompt('Note di risoluzione:');
-                      if (notes) markAsResolved(error.id!, notes);
-                    }}
-                    className="ml-4 inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                    title="Copy error log"
+                    className="ml-2 p-1 text-gray-500 hover:text-gray-700"
+                    onClick={() => copyErrorToClipboard(error)}
                   >
-                    Risolto
+                    <ClipboardCopy size={18} />
                   </button>
-                )}
+                  {copiedErrorId === error.id && (
+                    <span className="ml-2 text-xs text-green-600">Copiato!</span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
