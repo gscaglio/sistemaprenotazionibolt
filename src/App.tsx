@@ -5,6 +5,7 @@ import Calendar from './pages/Calendar';
 import RoomSelection from './pages/RoomSelection';
 import Bookings from './pages/Bookings';
 import Settings from './pages/Settings';
+import ErrorDashboard from './pages/ErrorDashboard';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -55,9 +56,19 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/errors"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ErrorDashboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </Router>
   );
 }
 
-export default App
+export default App;

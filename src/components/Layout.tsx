@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Calendar, BookOpen, Settings, LogOut } from 'lucide-react';
+import { Calendar, BookOpen, Settings, LogOut, AlertCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useEmergencyStore } from '../stores/emergencyStore';
 import { useRoomStore } from '../stores/roomStore';
@@ -32,6 +32,7 @@ function Layout({ children }: LayoutProps) {
     },
     { name: 'Prenotazioni', href: '/bookings', icon: BookOpen },
     { name: 'Impostazioni', href: '/settings', icon: Settings },
+    { name: 'Errori', href: '/errors', icon: AlertCircle },
   ];
 
   const handleLogout = () => {
