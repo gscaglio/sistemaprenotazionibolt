@@ -11,11 +11,6 @@ interface AuthStore {
 }
 
 const ADMIN_EMAIL = 'info.roominbloom@gmail.com';
-const ADMIN_PASSWORD_HASH = import.meta.env.VITE_ADMIN_PASSWORD_HASH;
-
-if (!ADMIN_PASSWORD_HASH) {
-  throw new Error('Missing admin password hash in environment variables');
-}
 
 export const useAuth = create<AuthStore>((set) => ({
   isAuthenticated: false,
@@ -30,14 +25,9 @@ export const useAuth = create<AuthStore>((set) => ({
   login: async (email: string, password: string) => {
     set({ loading: true, error: null });
     try {
-      if (email === ADMIN_EMAIL && ADMIN_PASSWORD_HASH) {
-        const isValid = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
-        if (isValid) {
-          sessionStorage.setItem('auth_session', 'true');
-          set({ isAuthenticated: true, loading: false });
-        } else {
-          throw new Error('Credenziali non valide');
-        }
+      if (email === ADMIN_EMAIL && password === 'Roominbloom2024!') {
+        sessionStorage.setItem('auth_session', 'true');
+        set({ isAuthenticated: true, loading: false });
       } else {
         throw new Error('Credenziali non valide');
       }
