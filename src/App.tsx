@@ -6,6 +6,7 @@ import RoomSelection from './pages/RoomSelection';
 import Bookings from './pages/Bookings';
 import Settings from './pages/Settings';
 import ErrorDashboard from './pages/ErrorDashboard';
+import TestErrors from './pages/TestErrors';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -68,10 +69,20 @@ function App() {
               </ProtectedRoute>
             }
           />
+          {process.env.NODE_ENV === 'development' && (
+            <Route
+              path="/test-errors"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <TestErrors />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+          )}
         </Routes>
       </Router>
     </ErrorBoundary>
   );
 }
-
-export default App;
