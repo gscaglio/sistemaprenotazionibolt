@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
-import * as Sentry from "@sentry/react";
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -21,23 +20,9 @@ function Login() {
       navigate('/');
     } catch (error) {
       toast.error('Credenziali non valide');
-      Sentry.captureException(error, {
-        tags: {
-          component: 'Login',
-          action: 'handleSubmit'
-        },
-        extra: {
-          email
-        }
-      });
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Pulsante temporaneo per testare Sentry
-  const testSentry = () => {
-    throw new Error("Test error for Sentry!");
   };
 
   return (
@@ -104,14 +89,6 @@ function Login() {
               </button>
             </div>
           </form>
-
-          {/* Pulsante di test per Sentry - RIMUOVERE DOPO IL TEST */}
-          <button
-            onClick={testSentry}
-            className="mt-4 w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-          >
-            Test Sentry Error
-          </button>
         </div>
       </div>
     </div>
