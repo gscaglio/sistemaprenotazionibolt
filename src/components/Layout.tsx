@@ -79,7 +79,7 @@ function Layout({ children }: LayoutProps) {
           </div>
         </div>
       </nav>
-      <main className={`max-w-7xl mx-auto px-4 py-6 mb-20 md:mb-0 md:py-12 ${isEmergencyActive ? 'md:mt-10' : ''}`}>
+      <main className={`max-w-7xl mx-auto px-4 py-6 mb-20 md:mb-0 md:py-12 ${isEmergencyActive ? 'mt-10' : ''}`}>
         {children}
       </main>
     </div>
