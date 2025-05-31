@@ -1,6 +1,6 @@
 import { supabase } from '../supabase';
 import { stripe } from '../stripe';
-import { notificationService } from '../notifications';
+import { sendNotificationsEdge } from '../notifications';
 import type { Database } from '../database.types';
 
 type Booking = Database['public']['Tables']['bookings']['Row'];
@@ -45,14 +45,18 @@ export const bookingsApi = {
 
     if (error) throw error;
 
-    // Send notifications
+    // Send notifications via Edge Function
     try {
-      await Promise.all([
-        notificationService.sendWhatsAppNotification(data),
-        notificationService.sendEmailToOwner(data)
-      ]);
+      const notificationResult = await sendNotificationsEdge(data);
+      if (!notificationResult.whatsapp_status.success || !notificationResult.email_status.success) {
+        console.warn('One or more notifications failed. Full status:', notificationResult);
+      } else {
+        console.log('Notifications sent successfully via Edge Function:', notificationResult);
+      }
     } catch (error) {
-      console.error('Failed to send notifications:', error);
+      // This catch block is for unexpected errors in sendNotificationsEdge itself,
+      // or if sendNotificationsEdge throws an error before returning a structured response.
+      console.error('Failed to invoke notification Edge Function or unexpected client-side error:', error);
       // Continue even if notifications fail
     }
 
