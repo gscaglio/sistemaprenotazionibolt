@@ -3,6 +3,7 @@ import type { Database } from '../lib/database.types';
 import { availabilityApi } from '../lib/api/availability';
 import { startOfMonth, endOfMonth, parse, format } from 'date-fns';
 import { errorLogger } from '../lib/errorLogger';
+import { supabase } from '../lib/supabase';
 
 type Availability = Database['public']['Tables']['availability']['Row'];
 type AvailabilityUpdate = Partial<Availability>;
@@ -94,8 +95,18 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
       set({ loading: false });
       return;
     }
+
     set({ loading: true, error: null });
+    
     try {
+      // Get current user ID
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error('User not authenticated');
+
+      // Log bulk update request
+      await supabase.rpc('log_bulk_update_request', { p_user_id: user.id });
+      
       console.log(`[Store] Calling API for bulk update with ${updates.length} updates.`);
       const returnedData = await availabilityApi.bulkUpdateAvailability(updates);
       
@@ -153,12 +164,23 @@ export const useAvailabilityStore = create<AvailabilityStore>((set, get) => ({
       });
 
     } catch (error) {
-      errorLogger.log(error instanceof Error ? error : new Error(String(error)), 'error', {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isRateLimit = errorMessage.includes('rate_limit_exceeded');
+      
+      errorLogger.log(error instanceof Error ? error : new Error(errorMessage), 'error', {
         operation: 'updateBulkAvailability',
         updatesCount: updates.length,
-        sample: logSample(updates)
+        sample: logSample(updates),
+        isRateLimit
       });
-      set({ error: (error as Error).message, loading: false });
+
+      set({ 
+        error: isRateLimit 
+          ? 'Hai superato il limite di richieste per gli aggiornamenti massivi. Riprova tra un minuto.' 
+          : errorMessage, 
+        loading: false 
+      });
+      throw error;
     }
   },
 }));

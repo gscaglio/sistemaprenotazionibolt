@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import bcrypt from 'bcryptjs';
+import { supabase } from '../lib/supabase';
+import { errorLogger } from '../lib/errorLogger';
 
 interface AuthStore {
   isAuthenticated: boolean;
@@ -25,6 +27,10 @@ export const useAuth = create<AuthStore>((set) => ({
   login: async (email: string, password: string) => {
     set({ loading: true, error: null });
     try {
+      // Check rate limit before attempting login
+      await supabase.rpc('log_login_attempt', { ip_address_param: 'unknown_ip' });
+      await supabase.rpc('check_login_attempts', { ip_address_param: 'unknown_ip' });
+
       if (email === ADMIN_EMAIL && password === 'Roominbloom2024!') {
         sessionStorage.setItem('auth_session', 'true');
         set({ isAuthenticated: true, loading: false });
@@ -32,8 +38,16 @@ export const useAuth = create<AuthStore>((set) => ({
         throw new Error('Credenziali non valide');
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Errore durante il login';
+      errorLogger.log(
+        error instanceof Error ? error : new Error(errorMessage),
+        'warning',
+        { operation: 'login', email }
+      );
       set({ 
-        error: error instanceof Error ? error.message : 'Errore durante il login',
+        error: errorMessage.includes('rate_limit_exceeded') 
+          ? 'Troppi tentativi di login. Riprova più tardi.' 
+          : errorMessage,
         loading: false,
         isAuthenticated: false 
       });
