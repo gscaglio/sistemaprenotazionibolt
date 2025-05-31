@@ -14,7 +14,7 @@ export const priceSchema = z.object({
 export const dateRangeSchema = z.object({
   startDate: z.date(),
   endDate: z.date()
-}).refine(data => data.endDate > data.startDate, {
+}).refine(data => data.endDate >= data.startDate, {
   message: "La data di fine deve essere successiva alla data di inizio",
   path: ["endDate"]
 });
