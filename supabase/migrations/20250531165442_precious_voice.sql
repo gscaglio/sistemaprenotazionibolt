@@ -31,32 +31,32 @@ BEGIN
     PERFORM pg_advisory_xact_lock(
       room_id::integer
     ) FROM (
-      SELECT DISTINCT (update_record->>'room_id')::integer as room_id 
-      FROM unnest(updates) as update_record
+      SELECT DISTINCT (current_update->>'room_id')::integer as room_id
+      FROM unnest(updates) as current_update
     ) rooms;
 
     -- Validate all updates before processing
-    FOR update_record IN SELECT * FROM unnest(updates)
+    FOR current_update IN SELECT * FROM unnest(updates)
     LOOP
       -- Validate required fields
       IF NOT (
-        update_record ? 'room_id' AND 
-        update_record ? 'date' AND 
-        update_record ? 'available'
+        current_update ? 'room_id' AND
+        current_update ? 'date' AND
+        current_update ? 'available'
       ) THEN
         RAISE EXCEPTION 'Invalid update record: missing required fields';
       END IF;
 
       -- Validate date format
       IF NOT (
-        update_record->>'date' ~ '^\d{4}-\d{2}-\d{2}$'
+        current_update->>'date' ~ '^\d{4}-\d{2}-\d{2}$'
       ) THEN
         RAISE EXCEPTION 'Invalid date format in update';
       END IF;
     END LOOP;
 
     -- Process updates with optimistic locking
-    FOR update_record IN SELECT * FROM unnest(updates)
+    FOR current_update IN SELECT * FROM unnest(updates)
     LOOP
       -- Insert or update with version check
       INSERT INTO availability (
@@ -69,12 +69,12 @@ BEGIN
         updated_at
       )
       VALUES (
-        (update_record->>'room_id')::integer,
-        (update_record->>'date')::date,
-        (update_record->>'available')::boolean,
-        (update_record->>'price_override')::numeric,
-        update_record->>'blocked_reason',
-        update_record->>'notes',
+        (current_update->>'room_id')::integer,
+        (current_update->>'date')::date,
+        (current_update->>'available')::boolean,
+        (current_update->>'price_override')::numeric,
+        current_update->>'blocked_reason',
+        current_update->>'notes',
         now()
       )
       ON CONFLICT (room_id, date) DO UPDATE
