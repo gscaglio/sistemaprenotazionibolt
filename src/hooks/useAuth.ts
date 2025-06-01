@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { auth } from '../lib/supabase';
 import { errorLogger } from '../lib/errorLogger';
 
 interface AuthStore {
@@ -18,8 +17,8 @@ export const useAuth = create<AuthStore>((set) => ({
 
   checkAuth: async () => {
     try {
-      const session = await auth.getSession();
-      set({ isAuthenticated: !!session });
+      const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+      set({ isAuthenticated });
     } catch (error) {
       set({ isAuthenticated: false });
     }
@@ -28,8 +27,12 @@ export const useAuth = create<AuthStore>((set) => ({
   login: async (email: string, password: string) => {
     set({ loading: true, error: null });
     try {
-      await auth.signIn(email, password);
-      set({ isAuthenticated: true, loading: false });
+      if (email === 'info.roominbloom@gmail.com' && password === 'Roominbloom2024!') {
+        localStorage.setItem('isAuthenticated', 'true');
+        set({ isAuthenticated: true, loading: false });
+      } else {
+        throw new Error('Credenziali non valide');
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Errore durante il login';
       errorLogger.log(
@@ -48,7 +51,7 @@ export const useAuth = create<AuthStore>((set) => ({
 
   logout: async () => {
     try {
-      await auth.signOut();
+      localStorage.removeItem('isAuthenticated');
       set({ isAuthenticated: false });
     } catch (error) {
       errorLogger.log(error instanceof Error ? error : new Error('Logout failed'), 'warning', {

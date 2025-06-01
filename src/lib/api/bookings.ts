@@ -1,51 +1,35 @@
 import { supabase } from '../supabase';
-import { stripe } from '../stripe';
 import { notificationService } from '../notifications';
 import type { Database } from '../database.types';
+import toast from 'react-hot-toast';
 
 type Booking = Database['public']['Tables']['bookings']['Row'];
 
 export const bookingsApi = {
-  // Public endpoints
   createBooking: async (booking: Omit<Booking, 'id' | 'created_at' | 'status' | 'payment_intent_id'>) => {
-    // Create Stripe Payment Intent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(booking.total_amount * 100),
-      currency: 'eur',
-      payment_method_types: ['card'],
-      metadata: {
-        booking_type: booking.booking_type,
-        check_in: booking.check_in,
-        check_out: booking.check_out
-      }
-    });
-
-    // Create booking with payment intent
     const { data, error } = await supabase
       .from('bookings')
       .insert([{
         ...booking,
-        status: 'pending',
-        payment_intent_id: paymentIntent.id
+        status: 'pending'
       }])
       .select()
       .single();
     
     if (error) throw error;
-    return { booking: data, clientSecret: paymentIntent.client_secret };
+    return { booking: data };
   },
 
-  confirmBooking: async (paymentIntentId: string) => {
+  confirmBooking: async (id: number) => {
     const { data, error } = await supabase
       .from('bookings')
       .update({ status: 'confirmed' })
-      .eq('payment_intent_id', paymentIntentId)
+      .eq('id', id)
       .select('*, rooms(*)')
       .single();
 
     if (error) throw error;
 
-    // Send notifications
     try {
       await Promise.all([
         notificationService.sendWhatsAppNotification(data),
@@ -53,13 +37,12 @@ export const bookingsApi = {
       ]);
     } catch (error) {
       console.error('Failed to send notifications:', error);
-      // Continue even if notifications fail
+      toast.error('Prenotazione confermata ma invio notifiche fallito');
     }
 
     return data;
   },
 
-  // Admin endpoints
   getAllBookings: async () => {
     const { data, error } = await supabase
       .from('bookings')
@@ -91,16 +74,6 @@ export const bookingsApi = {
   },
 
   cancelBooking: async (id: number) => {
-    const { data: booking } = await supabase
-      .from('bookings')
-      .select('payment_intent_id')
-      .eq('id', id)
-      .single();
-
-    if (booking?.payment_intent_id) {
-      await stripe.paymentIntents.cancel(booking.payment_intent_id);
-    }
-
     const { error } = await supabase
       .from('bookings')
       .update({ status: 'cancelled' })
