@@ -1,3 +1,4 @@
+// MVP VERSION - Simplified for stability
 import { supabase } from '../supabase';
 import type { Database } from '../database.types';
 import { endOfMonth, parse, format } from 'date-fns';

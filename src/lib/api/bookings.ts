@@ -1,3 +1,4 @@
+// MVP VERSION - Simplified for stability
 import { supabase } from '../supabase';
 import { notificationService } from '../notifications';
 import type { Database } from '../database.types';

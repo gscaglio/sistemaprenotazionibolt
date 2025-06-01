@@ -1,3 +1,4 @@
+// MVP VERSION - Simplified for stability
 import { create } from 'zustand';
 import { errorLogger } from '../lib/errorLogger';
 
